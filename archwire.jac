@@ -60,167 +60,12 @@ graph import {
     sellbird.desktop_cli --> sellbird.cli;
     sellbird.extensions --> sellbird.cli;
     sellbird.home --> sellbird.cli;
-    sellbird.brain ++> sellbird.setup { Brain }
-    sellbird.config ++> sellbird.setup { BrainConfig, COUNTRY_ALIASES, normalize_prospect_country }
-    sellbird.integrations.precleared ++> sellbird.setup {
-        GET_KEY_URL,
-        SENDER_COUNTRIES,
-        create_free_key,
-    }
-    sellbird.state ++> sellbird.setup { StateManager }
-    sellbird.paths ++> sellbird.setup { PROJECT_ROOT }
-    sellbird.textio ++> sellbird.setup { read_user_text, utf8_stdio }
-    sellbird.models.company ++> sellbird.state { Company }
-    sellbird.models.prospect ++> sellbird.state { Prospect }
-    sellbird.models.campaign ++> sellbird.state { Campaign }
-    sellbird.models.conversation ++> sellbird.state { Conversation }
-    sellbird.paths ++> sellbird.state { PROJECT_ROOT }
-    sellbird.startups ++> sellbird.state { parse_funding }
-    sellbird.storage as storage ++> sellbird.state;
-    sellbird.storage ++> sellbird.state { BUSY_TIMEOUT_SECONDS }
-    sellbird.workspace_home ++> sellbird.state { _HOME }
-    sellbird.usage ++> sellbird.integrations.quota { claude_config_dir }
     sellbird.config --> sellbird.integrations.precleared {
         PRECLEARED_SENDER_COUNTRIES,
         normalize_prospect_country,
     }
     sellbird.send_window --> sellbird.integrations.precleared { icp_country }
     sellbird.integrations.mail_provider --> sellbird.integrations.precleared { NATIVE_PROVIDERS }
-    sellbird.paths ++> sellbird.integrations.gmail { PROJECT_ROOT }
-    sellbird.workspace_home ++> sellbird.integrations.gmail { current_home }
-    sellbird.integrations.mail_provider ++> sellbird.integrations.gmail {
-        InboundMessage,
-        MailIdentity,
-        MailProvider,
-        SendResult,
-        TokenSource,
-        compose,
-        identity_from_config,
-        looks_like_bounce,
-        loopback_code,
-        missing_token_text,
-        read_token_file,
-        save_if_signed_in_as,
-        token_urlsafe,
-        write_token_file,
-    }
-    sellbird.integrations.signature ++> sellbird.integrations.gmail {
-        SignatureError,
-        load_signature,
-    }
-    sellbird.integrations.mail_provider ++> sellbird.integrations.smtp_mail {
-        InboundMessage,
-        MailIdentity,
-        MailProvider,
-        SendResult,
-        compose,
-        identity_from_config,
-        looks_like_bounce,
-    }
-    sellbird.integrations.signature ++> sellbird.integrations.smtp_mail {
-        SignatureError,
-        load_signature,
-    }
-    sellbird.integrations.signature ++> sellbird.integrations.mail_provider { set_body }
-    sellbird.paths ++> sellbird.integrations.microsoft { PROJECT_ROOT }
-    sellbird.workspace_home ++> sellbird.integrations.microsoft { current_home }
-    sellbird.integrations.mail_provider ++> sellbird.integrations.microsoft {
-        InboundMessage,
-        MailIdentity,
-        MailProvider,
-        SendResult,
-        TokenSource,
-        identity_from_config,
-        looks_like_bounce,
-        loopback_code,
-        missing_token_text,
-        read_token_file,
-        save_if_signed_in_as,
-        token_urlsafe,
-        write_token_file,
-    }
-    sellbird.integrations.signature ++> sellbird.integrations.microsoft {
-        SignatureError,
-        load_signature,
-        render_html,
-    }
-    sellbird.brain ++> sellbird.trainer { Brain }
-    sellbird.config ++> sellbird.trainer { BrainConfig, load_brain_config }
-    sellbird.public_http ++> sellbird.trainer { UnsafeURLError, public_http_client }
-    sellbird.state ++> sellbird.trainer { StateManager }
-    sellbird.paths ++> sellbird.trainer { PROJECT_ROOT }
-    sellbird.textio ++> sellbird.trainer { read_user_text, utf8_stdio }
-    sellbird.untrusted ++> sellbird.trainer { UNTRUSTED_RULE, fence }
-    sellbird.config ++> sellbird.mailboxes { WarmupConfig, cold_daily_cap }
-    sellbird.integrations.mail_provider ++> sellbird.mailboxes {
-        MailIdentity,
-        MailProvider,
-        NATIVE_PROVIDERS,
-        identity_from_config,
-    }
-    sellbird.secrets ++> sellbird.mailboxes { SecretStore, SecretStoreUnavailable }
-    sellbird.state ++> sellbird.mailboxes { StateManager, _new_id, _norm }
-    sellbird.workspace_home ++> sellbird.secrets { current_home }
-    sellbird.models ++> sellbird.collectors.discover { Company }
-    sellbird.collectors.ats ++> sellbird.collectors.discover { role_keywords }
-    sellbird.config ++> sellbird.collectors.discover { live_do_not_contact, load_env }
-    sellbird.gate ++> sellbird.collectors.discover { do_not_contact_domain_match }
-    sellbird.signals ++> sellbird.collectors.discover { seed_signal_catalog }
-    sellbird.brain ++> sellbird.agents.scout { Brain }
-    sellbird.collectors.people as people_mod ++> sellbird.agents.scout;
-    sellbird.collectors.discover ++> sellbird.agents.scout { site_name_from_html }
-    sellbird.collectors.profile ++> sellbird.agents.scout {
-        _reads_like_title,
-        fold_accents,
-        looks_like_challenge,
-    }
-    sellbird.config ++> sellbird.agents.scout { EnvConfig, SellbirdConfig, live_do_not_contact }
-    sellbird.gate ++> sellbird.agents.scout { do_not_contact_domain_match }
-    sellbird.integrations.email_finder ++> sellbird.agents.scout {
-        DEFAULT_PATTERN,
-        SMALL_BUSINESS_PATTERN,
-        find_email,
-        hunter_domain_people,
-        hunter_searches_remaining,
-        record_hunter_search,
-        site_email_evidence,
-        verify_published_address,
-    }
-    sellbird.integrations.linkedin ++> sellbird.agents.scout { LinkedInAutomation }
-    sellbird.models.company ++> sellbird.agents.scout { Company }
-    sellbird.models.prospect ++> sellbird.agents.scout { COMPANY_INBOX_SOURCE, Prospect }
-    sellbird.public_http ++> sellbird.agents.scout { public_http_client }
-    sellbird.state ++> sellbird.agents.scout { StateManager }
-    sellbird.untrusted ++> sellbird.agents.scout { UNTRUSTED_RULE, fence }
-    sellbird.integrations.tech_detect ++> sellbird.agents.scout { detect_tech }
-    sellbird.collectors.ats ++> sellbird.agents.scout { role_keywords }
-    sellbird.paths ++> sellbird.integrations.linkedin { PROJECT_ROOT }
-    sellbird.brain ++> sellbird.agents.writer { Brain }
-    sellbird.config ++> sellbird.agents.writer {
-        EmailRulesError,
-        SellbirdConfig,
-        compliance_of,
-        load_config,
-        load_email_rules,
-    }
-    sellbird.email_style ++> sellbird.agents.writer {
-        BREAKUP_MAX_WORDS,
-        FIRST_EMAIL_MAX_WORDS,
-        FOLLOW_UP_MAX_WORDS,
-        style_problems,
-        tidy,
-        with_sign_off,
-    }
-    sellbird.humanize ++> sellbird.agents.writer { humanize, humanizer_enabled }
-    sellbird.integrations.mail_provider ++> sellbird.agents.writer { NATIVE_PROVIDERS }
-    sellbird.models.campaign ++> sellbird.agents.writer { Campaign, EmailStep }
-    sellbird.state ++> sellbird.agents.writer { StateManager, WRITABLE_EMAIL_STATUSES }
-    sellbird.sending_mode ++> sellbird.agents.writer { sync_sending_mode }
-    sellbird.site_facts ++> sellbird.agents.writer { site_facts }
-    sellbird.startups ++> sellbird.agents.writer { startup_facts }
-    sellbird.untrusted ++> sellbird.agents.writer { UNTRUSTED_RULE, fence }
-    sellbird.workspace_home ++> sellbird.agents.writer { current_home }
-    sellbird.state ++> sellbird.agents.analyst { StateManager }
     sellbird.dashboard_instance --> sellbird.mcp_server;
     sellbird.dashboard_auth --> sellbird.mcp_server { TokenError, load_or_create_token }
     sellbird.paths --> sellbird.mcp_server { PROJECT_ROOT }
@@ -292,65 +137,6 @@ graph import {
     sellbird.inbox_routes --> sellbird.dashboard { router }
     sellbird.extensions --> sellbird.dashboard;
     sellbird.dashboard_instance --> sellbird.dashboard;
-    sellbird.extensions as extensions ++> sellbird.agent_policy;
-    sellbird.config --> sellbird.register { ComplianceConfig, live_do_not_contact }
-    sellbird.fit --> sellbird.register { company_fit, current_roles }
-    sellbird.gate --> sellbird.register { do_not_contact_match }
-    sellbird.storage --> sellbird.register;
-    sellbird.gate --> sellbird.export { do_not_contact_match }
-    sellbird.state --> sellbird.export { StateManager }
-    sellbird.storage --> sellbird.export;
-    sellbird.config --> sellbird.export {
-        ConfigError,
-        ConfigFileNotFoundError,
-        do_not_contact_from_file,
-        live_do_not_contact,
-    }
-    sellbird.mailboxes ++> sellbird.inbox_routes {
-    }
-    sellbird.config ++> sellbird.register { ComplianceConfig, live_do_not_contact }
-    sellbird.fit ++> sellbird.register { company_fit, current_roles }
-    sellbird.gate ++> sellbird.register { do_not_contact_match }
-    sellbird.storage as storage ++> sellbird.register;
-    sellbird.mailboxes --> sellbird.inbox_routes {
-        ConnectRefused,
-        HARD_MAX_INBOX_CAP,
-        MAIN,
-        MailboxStore,
-        build_provider,
-        check_provider_allows_inboxes,
-        connect_oauth_mailbox,
-        connect_smtp_mailbox,
-        load_inboxes,
-    }
-    sellbird.secrets ++> sellbird.inbox_routes { SecretStore, SecretStoreUnavailable }
-    sellbird.config ++> sellbird.inbox_routes { load_config, load_env }
-    sellbird.integrations.mail_provider ++> sellbird.inbox_routes {
-        NATIVE_PROVIDERS,
-        get_mail_provider,
-    }
-    sellbird.integrations.smtp_mail ++> sellbird.inbox_routes { SmtpSettings }
-    sellbird.mailboxes --> sellbird.inbox_cli {
-    }
-    sellbird.integrations.gmail --> sellbird.inbox_routes { run_auth_flow }
-    sellbird.integrations.microsoft --> sellbird.inbox_routes { run_auth_flow }
-    sellbird.integrations.smtp_mail --> sellbird.inbox_routes { SmtpSettings }
-    sellbird.mailboxes ++> sellbird.inbox_cli {
-        ConnectRefused,
-        HARD_MAX_INBOX_CAP,
-        MAIN,
-        MailboxStore,
-        build_provider,
-        check_provider_allows_inboxes,
-        connect_oauth_mailbox,
-        connect_smtp_mailbox,
-        load_inboxes,
-    }
-    sellbird.secrets ++> sellbird.inbox_cli { SecretStore, SecretStoreUnavailable }
-    sellbird.config ++> sellbird.inbox_cli { load_config, load_env }
-    sellbird.state ++> sellbird.inbox_cli { StateManager }
-    sellbird.paths ++> sellbird.desktop_cli { PROJECT_ROOT }
-    sellbird.logsafety ++> sellbird.desktop_cli { RedactSecrets }
     sellbird.paths --> sellbird.desktop.login_item { HOME_ENV, PROJECT_ROOT, user_home_default }
     sellbird.dashboard_instance --> sellbird.desktop.tray;
     sellbird.dashboard_auth --> sellbird.desktop.tray { TokenError, TokenStore }
@@ -1409,43 +1195,88 @@ graph import {
     tests.test_outbox_native --> tests.test_yc_startups { Cfg, Env }
     sellbird.dashboard --> tests.test_yc_startups;
     tests.test_dashboard_signals --> tests.test_yc_startups { client }
-    sellbird.models.company ++> sellbird.models.campaign { _utcnow }
-    sellbird.models.company ++> sellbird.models.conversation { _utcnow }
-    sellbird.paths ++> sellbird.pidfile { PROJECT_ROOT }
-    sellbird.paths ++> sellbird.legacy { PROJECT_ROOT }
-    sellbird.pidfile ++> sellbird.legacy { pid_alive, read_pid }
+    sellbird.paths --> tests.test_signature;
+    sellbird.paths --> tests.test_writer_email_rules;
+    sellbird.agents.sender --> tests.test_email_style;
+    sellbird.register --> tests.test_register;
     sellbird.legacy ++> sellbird { adopt_legacy_env }
-    sellbird.untrusted ++> sellbird.gate { UNTRUSTED_RULE }
-    sellbird.paths ++> sellbird.gate { PROJECT_ROOT }
+    sellbird.collectors.profile ++> sellbird.pipeline { profile_companies }
+    sellbird.collectors.discover ++> sellbird.pipeline { DEFAULT_PROVIDER, run_discovery }
+    sellbird.config ++> sellbird.sending_mode { refresh_sending_mode }
+    sellbird.integrations.trulyinbox ++> sellbird.deliverability { AFFILIATE_TAG, AFFILIATE_URL }
+    sellbird.gate ++> sellbird.export { do_not_contact_match }
+    sellbird.state ++> sellbird.export { StateManager }
+    sellbird.storage as storage ++> sellbird.export;
+    sellbird.config ++> sellbird.export {
+        ConfigError,
+        ConfigFileNotFoundError,
+        do_not_contact_from_file,
+        live_do_not_contact,
+    }
+    sellbird.config ++> sellbird.booking { operator_timezone, send_window_of }
+    sellbird.cli ++> sellbird.__main__ { main }
+    sellbird.config ++> sellbird.mailboxes { WarmupConfig, cold_daily_cap }
+    sellbird.integrations.mail_provider ++> sellbird.mailboxes {
+        MailIdentity,
+        MailProvider,
+        NATIVE_PROVIDERS,
+        identity_from_config,
+    }
+    sellbird.secrets ++> sellbird.mailboxes { SecretStore, SecretStoreUnavailable }
+    sellbird.state ++> sellbird.mailboxes { StateManager, _new_id, _norm }
+    sellbird.state ++> sellbird.brain { StateManager }
+    sellbird.paths ++> sellbird.brain { PROJECT_ROOT }
+    sellbird.textio ++> sellbird.brain { read_user_text }
+    sellbird.workspace_home ++> sellbird.brain { current_home }
+    sellbird.home ++> sellbird.brain { bundled_defaults }
+    sellbird.config ++> sellbird.brain { BrainConfig }
+    sellbird.codex ++> sellbird.brain { CodexClient, CodexQuotaClient, CodexError }
+    sellbird.integrations.quota ++> sellbird.brain { QuotaClient }
+    sellbird.claude_runtime ++> sellbird.brain {
+        ClaudeRuntimeError,
+        check_cli,
+        fingerprint,
+        build_command,
+        isolated_cwd,
+        runtime_env,
+    }
     sellbird.textio ++> sellbird.config { read_user_text }
     sellbird.paths ++> sellbird.config { PROJECT_ROOT, HOME_ENV, is_checkout }
     sellbird.gate ++> sellbird.config { do_not_contact_entries }
     sellbird.workspace_home ++> sellbird.config { current_home }
-    sellbird.config ++> sellbird.booking { operator_timezone, send_window_of }
-    sellbird.paths as paths ++> sellbird.home;
+    sellbird.workspace_home ++> sellbird.secrets { current_home }
+    sellbird.textio ++> sellbird.offer { read_user_text }
+    sellbird.untrusted ++> sellbird.offer { UNTRUSTED_RULE, fence }
+    sellbird.agents.writer ++> sellbird.offer { Writer, _names }
     sellbird.textio ++> sellbird.humanize { read_user_text }
     sellbird.untrusted ++> sellbird.humanize { UNTRUSTED_RULE, fence }
-    sellbird.paths ++> sellbird.integrations.signature { PROJECT_ROOT }
+    sellbird.paths ++> sellbird.desktop_cli { PROJECT_ROOT }
+    sellbird.logsafety ++> sellbird.desktop_cli { RedactSecrets }
+    sellbird.paths as paths ++> sellbird.home;
     sellbird.mailboxes ++> sellbird.extensions { BUILT_IN_CONNECTIONS }
-    sellbird.config ++> sellbird.sending_mode { refresh_sending_mode }
-    sellbird.integrations.trulyinbox ++> sellbird.deliverability { AFFILIATE_TAG, AFFILIATE_URL }
-    sellbird.collectors.profile ++> sellbird.pipeline { profile_companies }
-    sellbird.collectors.discover ++> sellbird.pipeline { DEFAULT_PROVIDER, run_discovery }
+    sellbird.mailboxes ++> sellbird.inbox_cli {
+        ConnectRefused,
+        HARD_MAX_INBOX_CAP,
+        MAIN,
+        MailboxStore,
+        build_provider,
+        check_provider_allows_inboxes,
+        connect_oauth_mailbox,
+        connect_smtp_mailbox,
+        load_inboxes,
+    }
+    sellbird.secrets ++> sellbird.inbox_cli { SecretStore, SecretStoreUnavailable }
+    sellbird.config ++> sellbird.inbox_cli { load_config, load_env }
+    sellbird.state ++> sellbird.inbox_cli { StateManager }
     sellbird.collectors.people ++> sellbird.fit { title_matches }
     sellbird.gate ++> sellbird.fit { do_not_contact_match }
-    sellbird.paths ++> sellbird.mcp_install { HOME_ENV, PROJECT_ROOT }
-    sellbird.workspace_home ++> sellbird.mcp_install { NotOnHosted, require_self_hosted }
-    sellbird.cli ++> sellbird.__main__ { main }
-    harvey ++> harvey.cli { NOTICE }
-    sellbird ++> harvey.cli;
-    sellbird.cli ++> harvey.cli { main as sellbird_main }
-    harvey.cli ++> harvey.__main__ { main }
-    sellbird.paths --> tests.test_signature;
-    sellbird.paths --> tests.test_writer_email_rules;
-    include sellbird.models.campaign ++> sellbird.models { Campaign, EmailStep }
-    include sellbird.models.company ++> sellbird.models { Company }
-    include sellbird.models.conversation ++> sellbird.models { Conversation, Message, STAGES }
-    include sellbird.models.prospect ++> sellbird.models { Prospect }
+    sellbird.config ++> sellbird.register { ComplianceConfig, live_do_not_contact }
+    sellbird.fit ++> sellbird.register { company_fit, current_roles }
+    sellbird.gate ++> sellbird.register { do_not_contact_match }
+    sellbird.storage as storage ++> sellbird.register;
+    sellbird.extensions as extensions ++> sellbird.agent_policy;
+    sellbird.paths ++> sellbird.legacy { PROJECT_ROOT }
+    sellbird.pidfile ++> sellbird.legacy { pid_alive, read_pid }
     sellbird.brain ++> sellbird.main { Brain }
     sellbird.extensions ++> sellbird.main { run_tick_steps }
     sellbird.sending_mode ++> sellbird.main { sync_sending_mode }
@@ -1480,34 +1311,114 @@ graph import {
     sellbird.paths ++> sellbird.main { PROJECT_ROOT }
     sellbird.textio ++> sellbird.main { read_user_text, utf8_stdio }
     sellbird.setup ++> sellbird.main { run_setup }
-    sellbird.textio ++> sellbird.offer { read_user_text }
-    sellbird.untrusted ++> sellbird.offer { UNTRUSTED_RULE, fence }
-    sellbird.agents.writer ++> sellbird.offer { Writer, _names }
-    sellbird.state ++> sellbird.brain { StateManager }
-    sellbird.paths ++> sellbird.brain { PROJECT_ROOT }
-    sellbird.textio ++> sellbird.brain { read_user_text }
-    sellbird.workspace_home ++> sellbird.brain { current_home }
-    sellbird.home ++> sellbird.brain { bundled_defaults }
-    sellbird.config ++> sellbird.brain { BrainConfig }
-    sellbird.codex ++> sellbird.brain { CodexClient, CodexQuotaClient, CodexError }
-    sellbird.integrations.quota ++> sellbird.brain { QuotaClient }
-    sellbird.claude_runtime ++> sellbird.brain {
-        ClaudeRuntimeError,
-        check_cli,
-        fingerprint,
-        build_command,
-        isolated_cwd,
-        runtime_env,
+    sellbird.brain ++> sellbird.trainer { Brain }
+    sellbird.config ++> sellbird.trainer { BrainConfig, load_brain_config }
+    sellbird.public_http ++> sellbird.trainer { UnsafeURLError, public_http_client }
+    sellbird.state ++> sellbird.trainer { StateManager }
+    sellbird.paths ++> sellbird.trainer { PROJECT_ROOT }
+    sellbird.textio ++> sellbird.trainer { read_user_text, utf8_stdio }
+    sellbird.untrusted ++> sellbird.trainer { UNTRUSTED_RULE, fence }
+    sellbird.paths ++> sellbird.pidfile { PROJECT_ROOT }
+    sellbird.models.company ++> sellbird.state { Company }
+    sellbird.models.prospect ++> sellbird.state { Prospect }
+    sellbird.models.campaign ++> sellbird.state { Campaign }
+    sellbird.models.conversation ++> sellbird.state { Conversation }
+    sellbird.paths ++> sellbird.state { PROJECT_ROOT }
+    sellbird.startups ++> sellbird.state { parse_funding }
+    sellbird.storage as storage ++> sellbird.state;
+    sellbird.storage ++> sellbird.state { BUSY_TIMEOUT_SECONDS }
+    sellbird.workspace_home ++> sellbird.state { _HOME }
+    sellbird.paths ++> sellbird.mcp_install { HOME_ENV, PROJECT_ROOT }
+    sellbird.workspace_home ++> sellbird.mcp_install { NotOnHosted, require_self_hosted }
+    sellbird.mailboxes ++> sellbird.inbox_routes {
+        ConnectRefused,
+        HARD_MAX_INBOX_CAP,
+        MAIN,
+        MailboxStore,
+        build_provider,
+        check_provider_allows_inboxes,
+        connect_oauth_mailbox,
+        connect_smtp_mailbox,
+        load_inboxes,
     }
-    sellbird.collectors.profile ++> sellbird.collectors.people {
-        NON_NAME_WORDS,
-        _NOUN_SUFFIX,
+    sellbird.secrets ++> sellbird.inbox_routes { SecretStore, SecretStoreUnavailable }
+    sellbird.config ++> sellbird.inbox_routes { load_config, load_env }
+    sellbird.integrations.mail_provider ++> sellbird.inbox_routes {
+        NATIVE_PROVIDERS,
+        get_mail_provider,
+    }
+    sellbird.integrations.smtp_mail ++> sellbird.inbox_routes { SmtpSettings }
+    sellbird.brain ++> sellbird.setup { Brain }
+    sellbird.config ++> sellbird.setup { BrainConfig, COUNTRY_ALIASES, normalize_prospect_country }
+    sellbird.integrations.precleared ++> sellbird.setup {
+        GET_KEY_URL,
+        SENDER_COUNTRIES,
+        create_free_key,
+    }
+    sellbird.state ++> sellbird.setup { StateManager }
+    sellbird.paths ++> sellbird.setup { PROJECT_ROOT }
+    sellbird.textio ++> sellbird.setup { read_user_text, utf8_stdio }
+    sellbird.untrusted ++> sellbird.gate { UNTRUSTED_RULE }
+    sellbird.paths ++> sellbird.gate { PROJECT_ROOT }
+    include sellbird.models.campaign ++> sellbird.models { Campaign, EmailStep }
+    include sellbird.models.company ++> sellbird.models { Company }
+    include sellbird.models.conversation ++> sellbird.models { Conversation, Message, STAGES }
+    include sellbird.models.prospect ++> sellbird.models { Prospect }
+    sellbird.models.company ++> sellbird.models.campaign { _utcnow }
+    sellbird.models.company ++> sellbird.models.conversation { _utcnow }
+    sellbird.brain ++> sellbird.agents.writer { Brain }
+    sellbird.config ++> sellbird.agents.writer {
+        EmailRulesError,
+        SellbirdConfig,
+        compliance_of,
+        load_config,
+        load_email_rules,
+    }
+    sellbird.email_style ++> sellbird.agents.writer {
+        BREAKUP_MAX_WORDS,
+        FIRST_EMAIL_MAX_WORDS,
+        FOLLOW_UP_MAX_WORDS,
+        style_problems,
+        tidy,
+        with_sign_off,
+    }
+    sellbird.humanize ++> sellbird.agents.writer { humanize, humanizer_enabled }
+    sellbird.integrations.mail_provider ++> sellbird.agents.writer { NATIVE_PROVIDERS }
+    sellbird.models.campaign ++> sellbird.agents.writer { Campaign, EmailStep }
+    sellbird.state ++> sellbird.agents.writer { StateManager, WRITABLE_EMAIL_STATUSES }
+    sellbird.sending_mode ++> sellbird.agents.writer { sync_sending_mode }
+    sellbird.site_facts ++> sellbird.agents.writer { site_facts }
+    sellbird.startups ++> sellbird.agents.writer { startup_facts }
+    sellbird.untrusted ++> sellbird.agents.writer { UNTRUSTED_RULE, fence }
+    sellbird.workspace_home ++> sellbird.agents.writer { current_home }
+    sellbird.brain ++> sellbird.agents.scout { Brain }
+    sellbird.collectors.people as people_mod ++> sellbird.agents.scout;
+    sellbird.collectors.discover ++> sellbird.agents.scout { site_name_from_html }
+    sellbird.collectors.profile ++> sellbird.agents.scout {
         _reads_like_title,
-        _strip_code,
         fold_accents,
-        nfc,
-        ProfileCollector,
+        looks_like_challenge,
     }
+    sellbird.config ++> sellbird.agents.scout { EnvConfig, SellbirdConfig, live_do_not_contact }
+    sellbird.gate ++> sellbird.agents.scout { do_not_contact_domain_match }
+    sellbird.integrations.email_finder ++> sellbird.agents.scout {
+        DEFAULT_PATTERN,
+        SMALL_BUSINESS_PATTERN,
+        find_email,
+        hunter_domain_people,
+        hunter_searches_remaining,
+        record_hunter_search,
+        site_email_evidence,
+        verify_published_address,
+    }
+    sellbird.integrations.linkedin ++> sellbird.agents.scout { LinkedInAutomation }
+    sellbird.models.company ++> sellbird.agents.scout { Company }
+    sellbird.models.prospect ++> sellbird.agents.scout { COMPANY_INBOX_SOURCE, Prospect }
+    sellbird.public_http ++> sellbird.agents.scout { public_http_client }
+    sellbird.state ++> sellbird.agents.scout { StateManager }
+    sellbird.untrusted ++> sellbird.agents.scout { UNTRUSTED_RULE, fence }
+    sellbird.integrations.tech_detect ++> sellbird.agents.scout { detect_tech }
+    sellbird.collectors.ats ++> sellbird.agents.scout { role_keywords }
     sellbird.config ++> sellbird.agents.sender {
         cold_daily_cap,
         compliance_footer_lines,
@@ -1565,7 +1476,7 @@ graph import {
     }
     sellbird.models.conversation ++> sellbird.agents.sender { Message }
     sellbird.storage as storage ++> sellbird.agents.sender;
-    sellbird.agents.sender --> tests.test_email_style;
+    sellbird.state ++> sellbird.agents.analyst { StateManager }
     sellbird.booking ++> sellbird.agents.handler { booking_instruction }
     sellbird.brain ++> sellbird.agents.handler { BrainUnavailable }
     sellbird.config ++> sellbird.agents.handler {
@@ -1596,6 +1507,67 @@ graph import {
     sellbird.untrusted ++> sellbird.agents.handler { UNTRUSTED_RULE, fence }
     sellbird.mailboxes ++> sellbird.agents.handler { load_inboxes }
     sellbird.handoff ++> sellbird.agents.handler { hand_off }
+    sellbird.integrations.signature ++> sellbird.integrations.mail_provider { set_body }
+    sellbird.paths ++> sellbird.integrations.signature { PROJECT_ROOT }
+    sellbird.paths ++> sellbird.integrations.linkedin { PROJECT_ROOT }
+    sellbird.paths ++> sellbird.integrations.gmail { PROJECT_ROOT }
+    sellbird.workspace_home ++> sellbird.integrations.gmail { current_home }
+    sellbird.integrations.mail_provider ++> sellbird.integrations.gmail {
+        InboundMessage,
+        MailIdentity,
+        MailProvider,
+        SendResult,
+        TokenSource,
+        compose,
+        identity_from_config,
+        looks_like_bounce,
+        loopback_code,
+        missing_token_text,
+        read_token_file,
+        save_if_signed_in_as,
+        token_urlsafe,
+        write_token_file,
+    }
+    sellbird.integrations.signature ++> sellbird.integrations.gmail {
+        SignatureError,
+        load_signature,
+    }
+    sellbird.usage ++> sellbird.integrations.quota { claude_config_dir }
+    sellbird.paths ++> sellbird.integrations.microsoft { PROJECT_ROOT }
+    sellbird.workspace_home ++> sellbird.integrations.microsoft { current_home }
+    sellbird.integrations.mail_provider ++> sellbird.integrations.microsoft {
+        InboundMessage,
+        MailIdentity,
+        MailProvider,
+        SendResult,
+        TokenSource,
+        identity_from_config,
+        looks_like_bounce,
+        loopback_code,
+        missing_token_text,
+        read_token_file,
+        save_if_signed_in_as,
+        token_urlsafe,
+        write_token_file,
+    }
+    sellbird.integrations.signature ++> sellbird.integrations.microsoft {
+        SignatureError,
+        load_signature,
+        render_html,
+    }
+    sellbird.integrations.mail_provider ++> sellbird.integrations.smtp_mail {
+        InboundMessage,
+        MailIdentity,
+        MailProvider,
+        SendResult,
+        compose,
+        identity_from_config,
+        looks_like_bounce,
+    }
+    sellbird.integrations.signature ++> sellbird.integrations.smtp_mail {
+        SignatureError,
+        load_signature,
+    }
     sellbird.public_http ++> sellbird.collectors.profile { public_http_client }
     sellbird.startups ++> sellbird.collectors.profile { funding_text }
     sellbird.collectors.ats ++> sellbird.collectors.profile {
@@ -1610,16 +1582,24 @@ graph import {
         site_name_from_html,
     }
     sellbird.signals ++> sellbird.collectors.profile { seed_signal_catalog }
-    sellbird.gate ++> sellbird.export { do_not_contact_match }
-    sellbird.state ++> sellbird.export { StateManager }
-    sellbird.storage as storage ++> sellbird.export;
-    sellbird.config ++> sellbird.export {
-        ConfigError,
-        ConfigFileNotFoundError,
-        do_not_contact_from_file,
-        live_do_not_contact,
+    sellbird.models ++> sellbird.collectors.discover { Company }
+    sellbird.collectors.ats ++> sellbird.collectors.discover { role_keywords }
+    sellbird.config ++> sellbird.collectors.discover { live_do_not_contact, load_env }
+    sellbird.gate ++> sellbird.collectors.discover { do_not_contact_domain_match }
+    sellbird.signals ++> sellbird.collectors.discover { seed_signal_catalog }
+    sellbird.collectors.profile ++> sellbird.collectors.people {
+        NON_NAME_WORDS,
+        _NOUN_SUFFIX,
+        _reads_like_title,
+        _strip_code,
+        fold_accents,
+        nfc,
+        ProfileCollector,
     }
-    sellbird.register --> tests.test_register;
+    harvey.cli ++> harvey.__main__ { main }
+    harvey ++> harvey.cli { NOTICE }
+    sellbird ++> harvey.cli;
+    sellbird.cli ++> harvey.cli { main as sellbird_main }
 }
 
 graph spaces {
