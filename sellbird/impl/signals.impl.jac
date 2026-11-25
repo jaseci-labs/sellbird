@@ -1,31 +1,24 @@
-impl _seeded(row: builtins.dict | None, sig: builtins.dict) -> builtins.bool {
-    if row is None {
-        return False;
-    }
-    if `any(operator.ne(row.get(f) or "", sig.get(f) or "") for f in _SEEDED_FIELDS) {
-        return False;
-    }
-    return operator.eq(
-        `float(row.get("confidence_floor") or 0.0), `float(sig.get("confidence_floor", 0.0))
-    );
+impl _signal(row: str) -> dict[str, any] {
+    sig: dict[str, any] = dict(zip(_COLUMNS, row.split("|")));
+    sig["confidence_floor"] = float(sig["confidence_floor"]);
+    return {k: sig[k] for k in _KEY_ORDER};
 }
 
-impl seed_signal_catalog(state) -> builtins.int {
-    have: any = {row["code"]: row for row in await state.get_signal_codes()};
+impl _seeded(row: any, sig: dict[str, any]) -> bool {
+    if row is None or any((row.get(f) or "") != (sig.get(f) or "") for f in _SEEDED_FIELDS) {
+        return False;
+    }
+    return float(row.get("confidence_floor") or 0.0) == float(sig.get("confidence_floor", 0.0));
+}
+
+impl seed_signal_catalog(state: any) -> int {
+    have = {row["code"]: row for row in await state.get_signal_codes()};
     for sig in SIGNAL_CATALOG {
-        if _seeded(have.get(sig["code"]), sig) {
-            continue;
+        if not _seeded(have.get(sig["code"]), sig) {
+            await state.upsert_signal_code(
+                sig["code"], **{k: v for (k, v) in sig.items() if k != "code"}
+            );
         }
-        await state.upsert_signal_code(
-            sig["code"],
-            label=sig["label"],
-            description=sig["description"],
-            category=sig["category"],
-            value_type=sig["value_type"],
-            collector=sig["collector"],
-            cost_note=sig["cost_note"],
-            confidence_floor=sig.get("confidence_floor", 0.0),
-        );
     }
     return len(SIGNAL_CATALOG);
 }
