@@ -107,23 +107,27 @@ graph import {
     }
     sellbird.send_window --> sellbird.integrations.precleared { icp_country }
     sellbird.integrations.mail_provider --> sellbird.integrations.precleared { NATIVE_PROVIDERS }
-    sellbird.paths --> sellbird.integrations.gmail { PROJECT_ROOT }
-    sellbird.workspace_home --> sellbird.integrations.gmail { current_home }
-    sellbird.integrations.mail_provider --> sellbird.integrations.gmail {
+    sellbird.paths ++> sellbird.integrations.gmail { PROJECT_ROOT }
+    sellbird.workspace_home ++> sellbird.integrations.gmail { current_home }
+    sellbird.integrations.mail_provider ++> sellbird.integrations.gmail {
         InboundMessage,
         MailIdentity,
         MailProvider,
         SendResult,
         TokenSource,
+        compose,
         identity_from_config,
         looks_like_bounce,
+        loopback_code,
         missing_token_text,
+        read_token_file,
         save_if_signed_in_as,
+        token_urlsafe,
+        write_token_file,
     }
-    sellbird.integrations.signature --> sellbird.integrations.gmail {
+    sellbird.integrations.signature ++> sellbird.integrations.gmail {
         SignatureError,
         load_signature,
-        set_body,
     }
     sellbird.integrations.mail_provider ++> sellbird.integrations.smtp_mail {
         InboundMessage,
