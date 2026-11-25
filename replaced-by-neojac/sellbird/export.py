@@ -42,7 +42,7 @@ async def collect_prospects(
     """
     import aiosqlite
 
-    from sellbird import storage
+    import sellbird.storage as storage
 
     where = []
     params: list = []

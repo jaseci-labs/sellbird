@@ -316,6 +316,8 @@ graph import {
         live_do_not_contact,
     }
     sellbird.mailboxes ++> sellbird.inbox_routes {
+    }
+    sellbird.mailboxes --> sellbird.inbox_routes {
         ConnectRefused,
         HARD_MAX_INBOX_CAP,
         MAIN,
@@ -1618,6 +1620,15 @@ graph import {
         site_name_from_html,
     }
     sellbird.signals ++> sellbird.collectors.profile { seed_signal_catalog }
+    sellbird.gate ++> sellbird.export { do_not_contact_match }
+    sellbird.state ++> sellbird.export { StateManager }
+    sellbird.storage as storage ++> sellbird.export;
+    sellbird.config ++> sellbird.export {
+        ConfigError,
+        ConfigFileNotFoundError,
+        do_not_contact_from_file,
+        live_do_not_contact,
+    }
 }
 
 graph spaces {

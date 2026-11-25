@@ -109,7 +109,7 @@ files = [
     "sellbird/desktop/tray.py",
     "sellbird/desktop_cli.py",
     "sellbird/email_style.jac",
-    "sellbird/export.py",
+    "sellbird/export.jac",
     "sellbird/extensions.jac",
     "sellbird/fit.jac",
     "sellbird/gate.jac",
