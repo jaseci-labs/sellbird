@@ -123,7 +123,7 @@ files = [
     "sellbird/integrations/gmail.py",
     "sellbird/integrations/instantly.jac",
     "sellbird/integrations/linkedin.py",
-    "sellbird/integrations/mail_provider.py",
+    "sellbird/integrations/mail_provider.jac",
     "sellbird/integrations/microsoft.py",
     "sellbird/integrations/precleared.py",
     "sellbird/integrations/quota.py",

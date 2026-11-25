@@ -107,9 +107,6 @@ graph import {
     }
     sellbird.send_window --> sellbird.integrations.precleared { icp_country }
     sellbird.integrations.mail_provider --> sellbird.integrations.precleared { NATIVE_PROVIDERS }
-    sellbird.integrations.gmail --> sellbird.integrations.mail_provider { GmailProvider }
-    sellbird.integrations.smtp_mail --> sellbird.integrations.mail_provider { SmtpImapProvider }
-    sellbird.integrations.microsoft --> sellbird.integrations.mail_provider { MicrosoftProvider }
     sellbird.paths --> sellbird.integrations.gmail { PROJECT_ROOT }
     sellbird.workspace_home --> sellbird.integrations.gmail { current_home }
     sellbird.integrations.mail_provider --> sellbird.integrations.gmail {
