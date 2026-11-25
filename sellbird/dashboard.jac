@@ -126,7 +126,8 @@ def _not_ok(message: str, code: int) -> any {
 }
 
 obj _Guarded {
-    has route: any, answer: any;
+    has route: any,
+        answer: any;
 
     async def __call__(*args: any, **kwargs: any) -> any {
         try {
@@ -1100,11 +1101,15 @@ async def _with_context(items: list[any]) -> list[any] {
     return items;
 }
 
-def _context(p: dict[any, any], campaign: str, signals: dict[any, dict[str, str]]) -> dict[str, any] {
+def _context(
+    p: dict[any, any], campaign: str, signals: dict[any, dict[str, str]]
+) -> dict[str, any] {
     return {
         "campaign": campaign,
         "company": p.get("company_name", ""),
         "website": p.get("website") or (f"https://{p['domain']}" if p.get("domain") else ""),
+        "description": p.get("description", ""),
+        "found_by": p.get("found_by", ""),
         "contact": _joined((p.get("first_name"), p.get("last_name")), " "),
         "contact_title": p.get("title", ""),
         "contact_source": p.get("source", ""),
@@ -1757,10 +1762,10 @@ def _discovery_queries(body: dict[any, any], config: any) -> any {
     if problem {
         raise ValueError(problem);
     }
-    cities = [c.strip() for c in (body.get("cities") or []) if c.strip()];
+    cities: list[str] | None = [c.strip() for c in (body.get("cities") or []) if c.strip()];
     return build_queries(
         config,
-        cities=cities or None,
+        cities=cities if cities else None,
         depth=int(body.get("depth") or 30),
         limit=int(body.get("limit") or 100),
         preset=preset,
@@ -1980,7 +1985,10 @@ async def get_live_status -> any {
     with_email = [p for p in prospects if p.get("email")];
     by_status = Counter([(p.get("email_status") or "guess").lower() for p in with_email]);
     deliverable = {p["id"] for p in with_email if p.get("email_status") in ("verified", "risky")};
-    unconfirmed = len(with_email) - by_status["verified"] - by_status["risky"] - by_status["invalid"];
+    unconfirmed = len(with_email)
+        - by_status["verified"]
+        - by_status["risky"]
+        - by_status["invalid"];
     drafted = _drafted_ids(await query_db("SELECT prospect_ids_json FROM campaigns"));
     sent = {p["id"] for p in prospects if p.get("status") in SENT_STATUSES};
     sellbird_sends = _sellbird_can_send();
@@ -2027,7 +2035,9 @@ async def get_live_status -> any {
         running.append(item);
     }
     last_contact = _parse_ts(await _first("SELECT MAX(prospects_checked_at) AS t FROM companies"));
-    finding_emails = bool(last_contact and (now - last_contact).total_seconds() < CONTACT_ACTIVE_SECONDS);
+    finding_emails = bool(
+        last_contact and (now - last_contact).total_seconds() < CONTACT_ACTIVE_SECONDS
+    );
     stages = [r["stage"] for r in running];
     (reading, finding) = ("profile" in stages, "discover" in stages);
     profile_eta = next((r["eta_min"] for r in running if r["stage"] == "profile"), None);
@@ -2355,7 +2365,7 @@ def _range_items(raw: str) -> list[any] {
     if any(len(p) != 3 for p in pieces) {
         raise ValueError("ranges look like CODE:min:max");
     }
-    return [{"code": code, "min": low, "max": high} for (code, low, high) in pieces];
+    return [{"code": p[0], "min": p[1], "max": p[2]} for p in pieces];
 }
 
 def _ranges(raw: any) -> list[any] {
