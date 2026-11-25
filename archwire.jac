@@ -317,6 +317,10 @@ graph import {
     }
     sellbird.mailboxes ++> sellbird.inbox_routes {
     }
+    sellbird.config ++> sellbird.register { ComplianceConfig, live_do_not_contact }
+    sellbird.fit ++> sellbird.register { company_fit, current_roles }
+    sellbird.gate ++> sellbird.register { do_not_contact_match }
+    sellbird.storage as storage ++> sellbird.register;
     sellbird.mailboxes --> sellbird.inbox_routes {
         ConnectRefused,
         HARD_MAX_INBOX_CAP,
@@ -1151,7 +1155,6 @@ graph import {
     sellbird.agents.scout --> tests.test_public_http { Scout }
     sellbird.collectors.profile --> tests.test_public_http { ProfileCollector }
     sellbird.trainer --> tests.test_public_http { FallbackCrawler }
-    sellbird.register --> tests.test_register;
     sellbird.register --> tests.test_register { build_register, company_status, to_csv }
     sellbird.config --> tests.test_register;
     sellbird.config --> tests.test_register { ComplianceConfig }
@@ -1629,6 +1632,7 @@ graph import {
         do_not_contact_from_file,
         live_do_not_contact,
     }
+    sellbird.register --> tests.test_register;
 }
 
 graph spaces {
