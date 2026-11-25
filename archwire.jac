@@ -361,7 +361,7 @@ graph import {
     sellbird.untrusted --> sellbird.agents.handler { UNTRUSTED_RULE, fence }
     sellbird.mailboxes --> sellbird.agents.handler { load_inboxes }
     sellbird.handoff --> sellbird.agents.handler { hand_off }
-    sellbird.state --> sellbird.agents.analyst { StateManager }
+    sellbird.state ++> sellbird.agents.analyst { StateManager }
     sellbird.dashboard_instance --> sellbird.mcp_server;
     sellbird.dashboard_auth --> sellbird.mcp_server { TokenError, load_or_create_token }
     sellbird.paths --> sellbird.mcp_server { PROJECT_ROOT }
