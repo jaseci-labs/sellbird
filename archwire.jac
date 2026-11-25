@@ -100,7 +100,7 @@ graph import {
     sellbird.workspace_home ++> sellbird.state { _HOME }
     sellbird.paths --> sellbird.workspace_home;
     sellbird.state --> sellbird.workspace_home;
-    sellbird.usage --> sellbird.integrations.quota { claude_config_dir }
+    sellbird.usage ++> sellbird.integrations.quota { claude_config_dir }
     sellbird.config --> sellbird.integrations.precleared {
         PRECLEARED_SENDER_COUNTRIES,
         normalize_prospect_country,

@@ -126,7 +126,7 @@ files = [
     "sellbird/integrations/mail_provider.jac",
     "sellbird/integrations/microsoft.py",
     "sellbird/integrations/precleared.py",
-    "sellbird/integrations/quota.py",
+    "sellbird/integrations/quota.jac",
     "sellbird/integrations/signature.jac",
     "sellbird/integrations/smtp_mail.py",
     "sellbird/integrations/tech_detect.jac",
