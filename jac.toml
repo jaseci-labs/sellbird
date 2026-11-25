@@ -157,7 +157,7 @@ files = [
     "sellbird/site_facts.jac",
     "sellbird/startups.jac",
     "sellbird/state.jac",
-    "sellbird/storage.py",
+    "sellbird/storage.jac",
     "sellbird/textio.jac",
     "sellbird/trainer.py",
     "sellbird/untrusted.jac",
