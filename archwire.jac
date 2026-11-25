@@ -3,13 +3,6 @@ graph layers {
 }
 
 graph import {
-    harvey.cli --> harvey.__main__ { main }
-    harvey --> harvey.cli { NOTICE }
-    sellbird --> harvey.cli;
-    sellbird.cli --> harvey.cli { main }
-    sellbird.legacy --> sellbird { adopt_legacy_env }
-    sellbird.paths --> sellbird.legacy { PROJECT_ROOT }
-    sellbird.pidfile --> sellbird.legacy { pid_alive, read_pid }
     sellbird.paths --> sellbird.cli { PACKAGE_ROOT, PROJECT_ROOT, is_checkout }
     sellbird.setup --> sellbird.cli { _read_env_file, run_setup }
     sellbird.main --> sellbird.cli { main, unusable_backlog_notice }
@@ -107,13 +100,6 @@ graph import {
     sellbird.workspace_home --> sellbird.state { _HOME }
     sellbird.paths --> sellbird.workspace_home;
     sellbird.state --> sellbird.workspace_home;
-    sellbird.paths --> sellbird.home;
-    sellbird.textio --> sellbird.config { read_user_text }
-    sellbird.paths --> sellbird.config { HOME_ENV, PROJECT_ROOT, is_checkout }
-    sellbird.gate --> sellbird.config { do_not_contact_entries }
-    sellbird.workspace_home --> sellbird.config { current_home }
-    sellbird.untrusted --> sellbird.gate { UNTRUSTED_RULE }
-    sellbird.paths --> sellbird.gate { PROJECT_ROOT }
     sellbird.usage --> sellbird.integrations.quota { claude_config_dir }
     sellbird.config --> sellbird.integrations.precleared {
         PRECLEARED_SENDER_COUNTRIES,
@@ -142,7 +128,6 @@ graph import {
         load_signature,
         set_body,
     }
-    sellbird.paths --> sellbird.integrations.signature { PROJECT_ROOT }
     sellbird.integrations.mail_provider --> sellbird.integrations.smtp_mail {
         InboundMessage,
         MailIdentity,
@@ -215,7 +200,6 @@ graph import {
     sellbird.paths --> sellbird.main { PROJECT_ROOT }
     sellbird.textio --> sellbird.main { read_user_text, utf8_stdio }
     sellbird.setup --> sellbird.main { run_setup }
-    sellbird.mailboxes --> sellbird.extensions { BUILT_IN_CONNECTIONS }
     sellbird.config --> sellbird.mailboxes { WarmupConfig, cold_daily_cap }
     sellbird.integrations.mail_provider --> sellbird.mailboxes {
         MailIdentity,
@@ -230,9 +214,6 @@ graph import {
     sellbird.integrations.microsoft --> sellbird.mailboxes { MicrosoftProvider }
     sellbird.extensions --> sellbird.mailboxes;
     sellbird.workspace_home --> sellbird.secrets { current_home }
-    sellbird.config --> sellbird.sending_mode { refresh_sending_mode }
-    sellbird.collectors.profile --> sellbird.pipeline { profile_companies }
-    sellbird.collectors.discover --> sellbird.pipeline { DEFAULT_PROVIDER, run_discovery }
     sellbird.public_http --> sellbird.collectors.profile { public_http_client }
     sellbird.startups --> sellbird.collectors.profile { funding_text }
     sellbird.collectors.ats --> sellbird.collectors.profile {
@@ -325,8 +306,6 @@ graph import {
     sellbird.startups --> sellbird.agents.writer { startup_facts }
     sellbird.untrusted --> sellbird.agents.writer { UNTRUSTED_RULE, fence }
     sellbird.workspace_home --> sellbird.agents.writer { current_home }
-    sellbird.textio --> sellbird.humanize { read_user_text }
-    sellbird.untrusted --> sellbird.humanize { UNTRUSTED_RULE, fence }
     sellbird.brain --> sellbird.agents.sender { Brain }
     sellbird.config --> sellbird.agents.sender {
         EnvConfig,
@@ -424,10 +403,7 @@ graph import {
     sellbird.untrusted --> sellbird.agents.handler { UNTRUSTED_RULE, fence }
     sellbird.mailboxes --> sellbird.agents.handler { load_inboxes }
     sellbird.handoff --> sellbird.agents.handler { hand_off }
-    sellbird.config --> sellbird.booking { operator_timezone, send_window_of }
     sellbird.state --> sellbird.agents.analyst { StateManager }
-    sellbird.paths --> sellbird.mcp_install { HOME_ENV, PROJECT_ROOT }
-    sellbird.workspace_home --> sellbird.mcp_install { NotOnHosted, require_self_hosted }
     sellbird.dashboard_instance --> sellbird.mcp_server;
     sellbird.dashboard_auth --> sellbird.mcp_server { TokenError, load_or_create_token }
     sellbird.paths --> sellbird.mcp_server { PROJECT_ROOT }
@@ -500,7 +476,6 @@ graph import {
     sellbird.extensions --> sellbird.dashboard;
     sellbird.dashboard_instance --> sellbird.dashboard;
     sellbird.extensions --> sellbird.agent_policy;
-    sellbird.integrations.trulyinbox --> sellbird.deliverability { AFFILIATE_TAG, AFFILIATE_URL }
     sellbird.textio --> sellbird.offer { read_user_text }
     sellbird.untrusted --> sellbird.offer { UNTRUSTED_RULE, fence }
     sellbird.agents.writer --> sellbird.offer { Writer, _names }
@@ -508,8 +483,6 @@ graph import {
     sellbird.fit --> sellbird.register { company_fit, current_roles }
     sellbird.gate --> sellbird.register { do_not_contact_match }
     sellbird.storage --> sellbird.register;
-    sellbird.collectors.people --> sellbird.fit { title_matches }
-    sellbird.gate --> sellbird.fit { do_not_contact_match }
     sellbird.gate --> sellbird.export { do_not_contact_match }
     sellbird.state --> sellbird.export { StateManager }
     sellbird.storage --> sellbird.export;
@@ -572,7 +545,6 @@ graph import {
     sellbird.desktop.login_item --> sellbird.desktop.tray;
     sellbird.pidfile --> sellbird.desktop.tray { hold_loop_lock, release_loop_lock }
     sellbird.collectors.discover --> scripts.diagnose_overpass { OpenStreetMap }
-    sellbird.cli --> sellbird.__main__ { main }
     sellbird.claude_runtime --> tests.conftest;
     sellbird.dashboard --> tests.conftest;
     sellbird.humanize --> tests.conftest;
@@ -1627,6 +1599,34 @@ graph import {
     sellbird.dashboard --> tests.test_yc_startups;
     tests.test_dashboard_signals --> tests.test_yc_startups { client }
     sellbird.paths ++> sellbird.pidfile { PROJECT_ROOT }
+    sellbird.paths ++> sellbird.legacy { PROJECT_ROOT }
+    sellbird.pidfile ++> sellbird.legacy { pid_alive, read_pid }
+    sellbird.legacy ++> sellbird { adopt_legacy_env }
+    sellbird.untrusted ++> sellbird.gate { UNTRUSTED_RULE }
+    sellbird.paths ++> sellbird.gate { PROJECT_ROOT }
+    sellbird.textio ++> sellbird.config { read_user_text }
+    sellbird.paths ++> sellbird.config { PROJECT_ROOT, HOME_ENV, is_checkout }
+    sellbird.gate ++> sellbird.config { do_not_contact_entries }
+    sellbird.workspace_home ++> sellbird.config { current_home }
+    sellbird.config ++> sellbird.booking { operator_timezone, send_window_of }
+    sellbird.paths as paths ++> sellbird.home;
+    sellbird.textio ++> sellbird.humanize { read_user_text }
+    sellbird.untrusted ++> sellbird.humanize { UNTRUSTED_RULE, fence }
+    sellbird.paths ++> sellbird.integrations.signature { PROJECT_ROOT }
+    sellbird.mailboxes ++> sellbird.extensions { BUILT_IN_CONNECTIONS }
+    sellbird.config ++> sellbird.sending_mode { refresh_sending_mode }
+    sellbird.integrations.trulyinbox ++> sellbird.deliverability { AFFILIATE_TAG, AFFILIATE_URL }
+    sellbird.collectors.profile ++> sellbird.pipeline { profile_companies }
+    sellbird.collectors.discover ++> sellbird.pipeline { DEFAULT_PROVIDER, run_discovery }
+    sellbird.collectors.people ++> sellbird.fit { title_matches }
+    sellbird.gate ++> sellbird.fit { do_not_contact_match }
+    sellbird.paths ++> sellbird.mcp_install { HOME_ENV, PROJECT_ROOT }
+    sellbird.workspace_home ++> sellbird.mcp_install { NotOnHosted, require_self_hosted }
+    sellbird.cli ++> sellbird.__main__ { main }
+    harvey ++> harvey.cli { NOTICE }
+    sellbird ++> harvey.cli;
+    sellbird.cli ++> harvey.cli { main as sellbird_main }
+    harvey.cli ++> harvey.__main__ { main }
 }
 
 graph spaces {
