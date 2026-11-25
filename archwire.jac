@@ -160,19 +160,15 @@ graph import {
     sellbird.paths --> sellbird.trainer { PROJECT_ROOT }
     sellbird.textio --> sellbird.trainer { read_user_text, utf8_stdio }
     sellbird.untrusted --> sellbird.trainer { UNTRUSTED_RULE, fence }
-    sellbird.config --> sellbird.mailboxes { WarmupConfig, cold_daily_cap }
-    sellbird.integrations.mail_provider --> sellbird.mailboxes {
+    sellbird.config ++> sellbird.mailboxes { WarmupConfig, cold_daily_cap }
+    sellbird.integrations.mail_provider ++> sellbird.mailboxes {
         MailIdentity,
         MailProvider,
         NATIVE_PROVIDERS,
         identity_from_config,
     }
-    sellbird.secrets --> sellbird.mailboxes { SecretStore, SecretStoreUnavailable }
-    sellbird.state --> sellbird.mailboxes { StateManager, _new_id, _norm }
-    sellbird.integrations.smtp_mail --> sellbird.mailboxes { SmtpImapProvider, SmtpSettings }
-    sellbird.integrations.gmail --> sellbird.mailboxes { GmailProvider }
-    sellbird.integrations.microsoft --> sellbird.mailboxes { MicrosoftProvider }
-    sellbird.extensions --> sellbird.mailboxes;
+    sellbird.secrets ++> sellbird.mailboxes { SecretStore, SecretStoreUnavailable }
+    sellbird.state ++> sellbird.mailboxes { StateManager, _new_id, _norm }
     sellbird.workspace_home ++> sellbird.secrets { current_home }
     sellbird.public_http --> sellbird.collectors.profile { public_http_client }
     sellbird.startups --> sellbird.collectors.profile { funding_text }

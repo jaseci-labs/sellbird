@@ -133,7 +133,7 @@ files = [
     "sellbird/integrations/trulyinbox.jac",
     "sellbird/legacy.jac",
     "sellbird/logsafety.jac",
-    "sellbird/mailboxes.py",
+    "sellbird/mailboxes.jac",
     "sellbird/main.jac",
     "sellbird/mcp_install.jac",
     "sellbird/mcp_server.py",
