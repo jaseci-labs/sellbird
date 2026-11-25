@@ -79,16 +79,6 @@ graph import {
         require_supported_platform,
     }
     sellbird.trainer --> sellbird.setup { Trainer, brain_section }
-    sellbird.state --> sellbird.brain { StateManager }
-    sellbird.paths --> sellbird.brain { PROJECT_ROOT }
-    sellbird.textio --> sellbird.brain { read_user_text }
-    sellbird.workspace_home --> sellbird.brain { current_home }
-    sellbird.home --> sellbird.brain { bundled_defaults }
-    sellbird.config --> sellbird.brain { BrainConfig }
-    sellbird.codex --> sellbird.brain { CodexClient, CodexError, CodexQuotaClient }
-    sellbird.integrations.quota --> sellbird.brain { QuotaClient }
-    sellbird.claude_runtime --> sellbird.brain;
-    sellbird.claude_runtime --> sellbird.brain { ClaudeRuntimeError, check_cli, fingerprint }
     sellbird.models.company ++> sellbird.state { Company }
     sellbird.models.prospect ++> sellbird.state { Prospect }
     sellbird.models.campaign ++> sellbird.state { Campaign }
@@ -1637,6 +1627,22 @@ graph import {
     sellbird.textio ++> sellbird.offer { read_user_text }
     sellbird.untrusted ++> sellbird.offer { UNTRUSTED_RULE, fence }
     sellbird.agents.writer ++> sellbird.offer { Writer, _names }
+    sellbird.state ++> sellbird.brain { StateManager }
+    sellbird.paths ++> sellbird.brain { PROJECT_ROOT }
+    sellbird.textio ++> sellbird.brain { read_user_text }
+    sellbird.workspace_home ++> sellbird.brain { current_home }
+    sellbird.home ++> sellbird.brain { bundled_defaults }
+    sellbird.config ++> sellbird.brain { BrainConfig }
+    sellbird.codex ++> sellbird.brain { CodexClient, CodexQuotaClient, CodexError }
+    sellbird.integrations.quota ++> sellbird.brain { QuotaClient }
+    sellbird.claude_runtime ++> sellbird.brain {
+        ClaudeRuntimeError,
+        check_cli,
+        fingerprint,
+        build_command,
+        isolated_cwd,
+        runtime_env,
+    }
 }
 
 graph spaces {

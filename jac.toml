@@ -90,7 +90,7 @@ files = [
     "sellbird/agents/sender.py",
     "sellbird/agents/writer.py",
     "sellbird/booking.jac",
-    "sellbird/brain.py",
+    "sellbird/brain.jac",
     "sellbird/claude_runtime.jac",
     "sellbird/cli.py",
     "sellbird/codex.py",
