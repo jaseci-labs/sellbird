@@ -1,30 +1,26 @@
-"""Approval or autopilot, picked up while Sellbird runs.
-
-The dashboard switch (or a hand edit) changes channels.email.require_approval
-in the config file. Whatever part of Sellbird notices first, the loop, the
-sender, the writer or the handler, calls sync_sending_mode, so going back to
-approval always brings what autopilot approved (and hasn't sent) back to the
-Outbox, whoever noticed.
-"""
-
-import builtins;
-
 import logging;
 
-glob logger: any = logging.getLogger("sellbird.sending_mode");
+glob logger = logging.getLogger("sellbird.sending_mode"),
+     SIGNATURE_HOLD_PREFIX = "email signature: ",
+     _RETRY = "Sellbird tries again every cycle; if this lasts, check the log.",
+     _INBOX_FIXES = (
+         ("sellbird gmail auth", "Run `sellbird gmail auth` to sign in again."),
+         ("sellbird microsoft auth", "Run `sellbird microsoft auth` to sign in again."),
+         (
+             "refusing a partial read",
+             "The mailbox got more mail in the last week than Sellbird reads, so it can't be sure it saw every reply. Send from a dedicated mailbox, or archive old mail.",
+         ),
+     );
 
-glob SIGNATURE_HOLD_PREFIX: any = "email signature: ";
-
-"""Bring ``config`` in line with its file. True when the mode changed."""
-async def sync_sending_mode(config, state) -> builtins.bool {
+async def sync_sending_mode(config: any, state: any) -> bool {
     if not refresh_sending_mode(config) {
         return False;
     }
     if config.channels.email.require_approval {
-        back: any = await state.requeue_autopilot_approved();
+        back = await state.requeue_autopilot_approved();
+        came = f" {back} queued by autopilot came back to the Outbox." if back else "";
         logger.warning(
-            "Sending mode is now APPROVAL: every email waits in the Outbox for you."
-                + (f" {back} queued by autopilot came back to the Outbox." if back else ""),
+            f"Sending mode is now APPROVAL: every email waits in the Outbox for you.{came}"
         );
     } else {
         logger.warning(
@@ -34,14 +30,10 @@ async def sync_sending_mode(config, state) -> builtins.bool {
     return True;
 }
 
-"""What Today and `sellbird status` say while sending is held because
-    replies couldn't all be read or handled: (title, detail)."""
-def held_message(
-    hold: builtins.dict, waiting: builtins.int
-) -> builtins.tuple[builtins.str, builtins.str] {
-    reason: any = `str(hold.get("reason") or "replies couldn't all be read").strip().rstrip(".");
-    low: any = reason.lower();
-    emails: any = "1 email is waiting" if waiting == 1 else f"{waiting} emails are waiting";
+def held_message(hold: dict[str, any], waiting: int) -> tuple[str, str] {
+    reason = str(hold.get("reason") or "replies couldn't all be read").strip().rstrip(".");
+    low = reason.lower();
+    emails = "1 email is waiting" if waiting == 1 else f"{waiting} emails are waiting";
     if low.startswith(SIGNATURE_HOLD_PREFIX) {
         return (
             "Sellbird isn't sending: your email logo can't be used",
@@ -49,29 +41,14 @@ def held_message(
         );
     }
     if low.startswith("a reply from") {
-        title: any = "Sellbird isn't sending: it couldn't handle a reply";
-        fix: any = "Sellbird tries again every cycle; if this lasts, check the log.";
+        (title, fix) = ("Sellbird isn't sending: it couldn't handle a reply", _RETRY);
     } else {
         title = "Sellbird isn't sending: it couldn't read your inbox";
-        if "sellbird gmail auth" in low {
-            fix = "Run `sellbird gmail auth` to sign in again.";
-        } elif "sellbird microsoft auth" in low {
-            fix = "Run `sellbird microsoft auth` to sign in again.";
-        } elif "refusing a partial read" in low {
-            fix = "The mailbox got more mail in the last week than Sellbird reads, so it can't be sure it saw every reply. Send from a dedicated mailbox, or archive old mail.";
-        } else {
-            fix = "Sellbird tries again every cycle; if this lasts, check the log.";
-        }
+        fix = next((f for (k, f) in _INBOX_FIXES if k in low), _RETRY);
     }
+    since = str(hold.get("since", "?"))[:16].replace("T", " ");
     return (
         title,
-        format(reason, "")
-            + ". "
-            + format(fix, "")
-            + " "
-            + format(emails, "")
-            + ": replies are read first, so an opt-out stops its follow-up before anything goes. Held since "
-            + format(`str(hold.get("since", "?"))[:16].replace("T", " "), "")
-            + " UTC.",
+        f"{reason}. {fix} {emails}: replies are read first, so an opt-out stops its follow-up before anything goes. Held since {since} UTC.",
     );
 }
