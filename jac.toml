@@ -106,7 +106,7 @@ files = [
     "sellbird/deliverability.jac",
     "sellbird/desktop/__init__.jac",
     "sellbird/desktop/login_item.jac",
-    "sellbird/desktop/tray.py",
+    "sellbird/desktop/tray.jac",
     "sellbird/desktop_cli.jac",
     "sellbird/email_style.jac",
     "sellbird/export.jac",
