@@ -239,10 +239,6 @@ graph import {
     sellbird.config --> sellbird.collectors.discover { live_do_not_contact, load_env }
     sellbird.gate --> sellbird.collectors.discover { do_not_contact_domain_match }
     sellbird.signals --> sellbird.collectors.discover { seed_signal_catalog }
-    sellbird.models.campaign --> sellbird.models { Campaign, EmailStep }
-    sellbird.models.company --> sellbird.models { Company }
-    sellbird.models.conversation --> sellbird.models { Conversation, Message, STAGES }
-    sellbird.models.prospect --> sellbird.models { Prospect }
     sellbird.collectors.profile --> sellbird.collectors.people {
         NON_NAME_WORDS,
         ProfileCollector,
@@ -1598,6 +1594,8 @@ graph import {
     tests.test_outbox_native --> tests.test_yc_startups { Cfg, Env }
     sellbird.dashboard --> tests.test_yc_startups;
     tests.test_dashboard_signals --> tests.test_yc_startups { client }
+    sellbird.models.company ++> sellbird.models.campaign { _utcnow }
+    sellbird.models.company ++> sellbird.models.conversation { _utcnow }
     sellbird.paths ++> sellbird.pidfile { PROJECT_ROOT }
     sellbird.paths ++> sellbird.legacy { PROJECT_ROOT }
     sellbird.pidfile ++> sellbird.legacy { pid_alive, read_pid }
@@ -1629,6 +1627,10 @@ graph import {
     harvey.cli ++> harvey.__main__ { main }
     sellbird.paths --> tests.test_signature;
     sellbird.paths --> tests.test_writer_email_rules;
+    include sellbird.models.campaign ++> sellbird.models { Campaign, EmailStep }
+    include sellbird.models.company ++> sellbird.models { Company }
+    include sellbird.models.conversation ++> sellbird.models { Conversation, Message, STAGES }
+    include sellbird.models.prospect ++> sellbird.models { Prospect }
 }
 
 graph spaces {
