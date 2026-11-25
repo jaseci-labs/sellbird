@@ -1543,6 +1543,7 @@ graph import {
     harvey ++> harvey.cli { NOTICE }
     sellbird ++> harvey.cli;
     sellbird.cli ++> harvey.cli { main as sellbird_main }
+    sellbird.cli --> tests.test_accelerators_funding;
 }
 
 graph spaces {

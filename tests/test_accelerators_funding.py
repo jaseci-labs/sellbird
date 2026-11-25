@@ -326,14 +326,18 @@ def test_an_accelerator_preset_hit_is_evidence():
                 if r["signal_code"] == "FUNDING_ROUND"]
 
 
-def test_cli_and_dashboard_take_the_presets():
+def test_cli_and_dashboard_take_the_presets(monkeypatch, capsys):
+    import sys
+    import sellbird.cli as cli
     import sellbird.dashboard as dash
     from sellbird.paths import PROJECT_ROOT
     for preset in ("accelerator", "funding"):
         assert dash._discovery_queries({"provider": "serper", "preset": preset}, _config())
-    cli = (PROJECT_ROOT / "sellbird" / "cli.py").read_text(encoding="utf-8")
-    choices = re.search(r'"--preset", default="", choices=\[([^\]]*)\]', cli).group(1)
-    assert '"accelerator"' in choices and '"funding"' in choices
+    monkeypatch.setattr(sys, "argv", ["sellbird", "discover", "--help"])
+    with pytest.raises(SystemExit):
+        cli.main()
+    choices = re.search(r"--preset \{([^}]*)\}", capsys.readouterr().out).group(1).split(",")
+    assert "accelerator" in choices and "funding" in choices
     page = (PROJECT_ROOT / "sellbird" / "web" / "index.html").read_text(encoding="utf-8")
     assert 'value="accelerator"' in page and 'value="funding"' in page
 
