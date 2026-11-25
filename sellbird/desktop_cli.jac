@@ -1,38 +1,35 @@
-import importlib;
 import logging;
 import subprocess;
 import sys;
 import from pathlib { Path }
 
-glob _AUTOSTART_PORT_HELP = "Dashboard port the tray uses (default: the tray's own default)",
-     _STATUS_HELP = "Print whether it's running and the next setup step, then exit",
-     _TRAY_PORT_HELP = "Dashboard port (default: the last one given, else 5555)",
-     _FOREIGN = "exists but wasn't created by Sellbird.";
+def _add_port(sub: any, help: str) {
+    sub.add_argument("--port", type=int, default=None, help=help);
+}
 
 def register_desktop_commands(subparsers: any) {
     sub = subparsers.add_parser("autostart", help="Start the Sellbird tray when you log in");
     sub.add_argument("autostart_action", choices=["install", "uninstall", "status"]);
-    sub.add_argument("--port", type=int, default=None, help=_AUTOSTART_PORT_HELP);
+    _add_port(sub, "Dashboard port the tray uses (default: the tray's own default)");
     sub.set_defaults(func=cmd_autostart);
 }
 
 def cmd_autostart(args: any, **injected: any) {
-    li = importlib.import_module("sellbird.desktop.login_item");
+    import sellbird.desktop.login_item as li;
     common = {"platform": None, "runner": subprocess.run, "env": None, "home": None} | injected;
     try {
         if args.autostart_action == "install" {
             print(f"  {li.install(port=args.port, **common).message}");
         } elif args.autostart_action == "uninstall" {
             print(f"  {li.uninstall(**common).message}");
+        } elif not (state := li.status(**common))["installed"] {
+            print("  Start at login is off.");
+        } elif state["ours"] {
+            print(f"  Start at login is on ({state['path']}).");
         } else {
-            state = li.status(**common);
-            if not state["installed"] {
-                print("  Start at login is off.");
-            } elif state["ours"] {
-                print(f"  Start at login is on ({state['path']}).");
-            } else {
-                print(f"  Start at login is off. {state['path']} {_FOREIGN}");
-            }
+            print(
+                f"  Start at login is off. {state['path']} exists but wasn't created by Sellbird."
+            );
         }
     } except (li.UnsupportedPlatform, li.ForeignLoginItem, li.LoginItemFailed) as e {
         print(f"  {e}", file=sys.stderr);
@@ -42,13 +39,14 @@ def cmd_autostart(args: any, **injected: any) {
 
 def register(subparsers: any) {
     sub = subparsers.add_parser("tray", help="Menu-bar icon: start, stop and open Sellbird");
-    sub.add_argument("--status", action="store_true", help=_STATUS_HELP);
-    sub.add_argument("--port", type=int, default=None, help=_TRAY_PORT_HELP);
+    help = "Print whether it's running and the next setup step, then exit";
+    sub.add_argument("--status", action="store_true", help=help);
+    _add_port(sub, "Dashboard port (default: the last one given, else 5555)");
     sub.set_defaults(func=cmd_tray);
 }
 
 def cmd_tray(args: any, *, data_dir: any = None, transport: any = None, autostart: any = None) {
-    tray = importlib.import_module("sellbird.desktop.tray");
+    import sellbird.desktop.tray as tray;
     data_dir = Path(data_dir) if data_dir is not None else PROJECT_ROOT / "data";
     if args.port is not None and not (1 <= args.port and args.port <= 65535) {
         print(f"  Invalid port: {args.port}. Must be 1-65535.", file=sys.stderr);
@@ -74,8 +72,7 @@ def cmd_tray(args: any, *, data_dir: any = None, transport: any = None, autostar
     handler = logging.StreamHandler();
     handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s: %(message)s"));
     handler.addFilter(RedactSecrets());
-    tray_logger = logging.getLogger("sellbird.tray");
-    tray_logger.addHandler(handler);
+    (tray_logger := logging.getLogger("sellbird.tray")).addHandler(handler);
     tray_logger.setLevel(logging.INFO);
     try {
         tray.run_tray(data_dir, port=port, controller=controller, autostart=autostart);

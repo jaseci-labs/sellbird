@@ -1122,6 +1122,8 @@ graph import {
     sellbird.untrusted ++> sellbird.humanize { UNTRUSTED_RULE, fence }
     sellbird.paths ++> sellbird.desktop_cli { PROJECT_ROOT }
     sellbird.logsafety ++> sellbird.desktop_cli { RedactSecrets }
+    sellbird.desktop.login_item as li ++> sellbird.desktop_cli;
+    sellbird.desktop.tray as tray ++> sellbird.desktop_cli;
     sellbird.paths as paths ++> sellbird.home;
     sellbird.mailboxes ++> sellbird.extensions { BUILT_IN_CONNECTIONS }
     sellbird.mailboxes ++> sellbird.inbox_cli {
