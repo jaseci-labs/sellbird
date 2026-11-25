@@ -9,72 +9,6 @@ graph import {
     }
     sellbird.send_window --> sellbird.integrations.precleared { icp_country }
     sellbird.integrations.mail_provider --> sellbird.integrations.precleared { NATIVE_PROVIDERS }
-    sellbird.agent_policy --> sellbird.dashboard;
-    sellbird.dashboard_auth --> sellbird.dashboard;
-    sellbird.paths --> sellbird.dashboard { PACKAGE_ROOT, PROJECT_ROOT, is_checkout }
-    sellbird.storage --> sellbird.dashboard;
-    sellbird.pidfile --> sellbird.dashboard { LOCK_FILE, loop_lock_held, pid_alive }
-    sellbird.textio --> sellbird.dashboard { read_user_text }
-    sellbird.workspace_home --> sellbird.dashboard { NotOnHosted, use_home }
-    sellbird.config --> sellbird.dashboard {
-        ConfigError,
-        ConfigFileNotFoundError,
-        _find_config_file,
-        compliance_footer_lines,
-        compliance_notice,
-        legacy_sending_held,
-        load_brain_config,
-        load_config,
-        load_env,
-        set_require_approval,
-    }
-    sellbird.integrations.trulyinbox --> sellbird.dashboard;
-    sellbird.deliverability --> sellbird.dashboard;
-    sellbird.legacy --> sellbird.dashboard;
-    sellbird.brain --> sellbird.dashboard { BRAIN_STATUS_KEY, Brain, active_brain_status }
-    sellbird.offer --> sellbird.dashboard {
-        MAX_OFFER_CHARS,
-        PROPOSED_KEY,
-        company_view,
-        offer_view,
-        preview_email,
-        save_company,
-        save_offer,
-        suggest_offers,
-    }
-    sellbird.register --> sellbird.dashboard { build_register, to_csv }
-    sellbird.main --> sellbird.dashboard { _needs_setup }
-    sellbird.codex --> sellbird.dashboard { CodexClient, CodexQuotaClient }
-    sellbird.integrations.quota --> sellbird.dashboard { QuotaClient }
-    sellbird.state --> sellbird.dashboard {
-        HAND_SENT_REASON,
-        MANUAL_SEND_KEY,
-        MAYBE_SENT_PREFIX,
-        StateManager,
-    }
-    sellbird.gate --> sellbird.dashboard { _booking_prefix, allowed_link_domains, pre_send_check }
-    sellbird.email_style --> sellbird.dashboard { style_problems }
-    sellbird.integrations.mail_provider --> sellbird.dashboard {
-        NATIVE_PROVIDERS,
-        get_mail_provider,
-    }
-    sellbird.export --> sellbird.dashboard { export_prospects_csv }
-    sellbird.collectors.discover --> sellbird.dashboard {
-        DEFAULT_PROVIDER,
-        PROVIDERS,
-        build_queries,
-        estimate_cost,
-        preset_problem,
-        provider_menu,
-    }
-    sellbird.pipeline --> sellbird.dashboard { run_profile_stage, run_prospecting }
-    sellbird.signals --> sellbird.dashboard { seed_signal_catalog }
-    sellbird.agents.writer --> sellbird.dashboard { EMAIL_RULES_PROBLEM_KEY }
-    sellbird.sending_mode --> sellbird.dashboard { held_message }
-    sellbird.integrations.precleared --> sellbird.dashboard { current_hold, hold_message }
-    sellbird.inbox_routes --> sellbird.dashboard { router }
-    sellbird.extensions --> sellbird.dashboard;
-    sellbird.dashboard_instance --> sellbird.dashboard;
     sellbird.collectors.discover --> scripts.diagnose_overpass { OpenStreetMap }
     sellbird.claude_runtime --> tests.conftest;
     sellbird.dashboard --> tests.conftest;
@@ -1132,6 +1066,7 @@ graph import {
     sellbird.agents.sender --> tests.test_email_style;
     sellbird.register --> tests.test_register;
     sellbird.cli --> tests.test_accelerators_funding;
+    sellbird.paths --> tests.test_login_item;
     sellbird.legacy ++> sellbird { adopt_legacy_env }
     sellbird.collectors.profile ++> sellbird.pipeline { profile_companies }
     sellbird.collectors.discover ++> sellbird.pipeline { DEFAULT_PROVIDER, run_discovery }
@@ -1207,6 +1142,72 @@ graph import {
     sellbird.secrets ++> sellbird.inbox_cli { SecretStore, SecretStoreUnavailable }
     sellbird.config ++> sellbird.inbox_cli { load_config, load_env }
     sellbird.state ++> sellbird.inbox_cli { StateManager }
+    sellbird.agent_policy as agent_policy ++> sellbird.dashboard;
+    sellbird.dashboard_auth as auth ++> sellbird.dashboard;
+    sellbird.paths ++> sellbird.dashboard { PACKAGE_ROOT, PROJECT_ROOT, is_checkout }
+    sellbird.storage as storage ++> sellbird.dashboard;
+    sellbird.pidfile ++> sellbird.dashboard { LOCK_FILE, loop_lock_held, pid_alive }
+    sellbird.textio ++> sellbird.dashboard { read_user_text }
+    sellbird.workspace_home ++> sellbird.dashboard { NotOnHosted, use_home }
+    sellbird.config ++> sellbird.dashboard {
+        ConfigError,
+        ConfigFileNotFoundError,
+        _find_config_file,
+        compliance_footer_lines,
+        compliance_notice,
+        legacy_sending_held,
+        load_brain_config,
+        load_config,
+        load_env,
+        set_require_approval,
+    }
+    sellbird.integrations.trulyinbox as ti ++> sellbird.dashboard;
+    sellbird.deliverability as d ++> sellbird.dashboard;
+    sellbird.legacy as legacy ++> sellbird.dashboard;
+    sellbird.brain ++> sellbird.dashboard { BRAIN_STATUS_KEY, Brain, active_brain_status }
+    sellbird.offer ++> sellbird.dashboard {
+        MAX_OFFER_CHARS,
+        PROPOSED_KEY,
+        company_view,
+        offer_view,
+        preview_email,
+        save_company,
+        save_offer,
+        suggest_offers,
+    }
+    sellbird.register ++> sellbird.dashboard { build_register, to_csv }
+    sellbird.main ++> sellbird.dashboard { _needs_setup }
+    sellbird.codex ++> sellbird.dashboard { CodexClient, CodexQuotaClient }
+    sellbird.integrations.quota ++> sellbird.dashboard { QuotaClient }
+    sellbird.state ++> sellbird.dashboard {
+        HAND_SENT_REASON,
+        MANUAL_SEND_KEY,
+        MAYBE_SENT_PREFIX,
+        StateManager,
+    }
+    sellbird.gate ++> sellbird.dashboard { _booking_prefix, allowed_link_domains, pre_send_check }
+    sellbird.email_style ++> sellbird.dashboard { style_problems }
+    sellbird.integrations.mail_provider ++> sellbird.dashboard {
+        NATIVE_PROVIDERS,
+        get_mail_provider,
+    }
+    sellbird.export ++> sellbird.dashboard { export_prospects_csv }
+    sellbird.collectors.discover ++> sellbird.dashboard {
+        DEFAULT_PROVIDER,
+        PROVIDERS,
+        build_queries,
+        estimate_cost,
+        preset_problem,
+        provider_menu,
+    }
+    sellbird.pipeline ++> sellbird.dashboard { run_profile_stage, run_prospecting }
+    sellbird.signals ++> sellbird.dashboard { seed_signal_catalog }
+    sellbird.agents.writer ++> sellbird.dashboard { EMAIL_RULES_PROBLEM_KEY }
+    sellbird.sending_mode ++> sellbird.dashboard { held_message }
+    sellbird.integrations.precleared ++> sellbird.dashboard { current_hold, hold_message }
+    sellbird.inbox_routes ++> sellbird.dashboard { router as _inbox_router }
+    sellbird.extensions as _extensions ++> sellbird.dashboard;
+    sellbird.dashboard_instance as dashboard_instance ++> sellbird.dashboard;
     sellbird.collectors.people ++> sellbird.fit { title_matches }
     sellbird.gate ++> sellbird.fit { do_not_contact_match }
     sellbird.config ++> sellbird.register { ComplianceConfig, live_do_not_contact }
@@ -1546,7 +1547,8 @@ graph import {
     harvey ++> harvey.cli { NOTICE }
     sellbird ++> harvey.cli;
     sellbird.cli ++> harvey.cli { main as sellbird_main }
-    sellbird.paths --> tests.test_login_item;
+    sellbird.dashboard --> tests.test_compliance_footer;
+    sellbird.dashboard --> tests.test_precleared_hold;
 }
 
 graph spaces {
