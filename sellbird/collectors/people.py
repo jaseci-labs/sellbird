@@ -23,7 +23,7 @@ import re
 from urllib.parse import unquote, urljoin, urlparse
 
 from sellbird.collectors.profile import (
-    NON_NAME_WORDS, ROLE_HINT, _NOUN_SUFFIX, _reads_like_title, _strip_code, fold_accents, nfc,
+    NON_NAME_WORDS, _NOUN_SUFFIX, _reads_like_title, _strip_code, fold_accents, nfc,
 )
 
 # ── what a name is ───────────────────────────────────────────────────────
@@ -191,10 +191,6 @@ _OWNER_TITLE = re.compile(
 _SUBORDINATE = re.compile(r"\b(?:vice[- ]presidente?|vp|svp|evp|assistant(?: to)?|"
                           r"executive assistant|to the|deputy|associate|aide|"
                           r"assistante?s?|adjointe?s?|sous-\w+)\b", re.I)
-_PROFESSIONAL = re.compile(
-    r"\b(?:dds|dmd|md|dvm|od|esq|cpa|attorney|lawyer|dentist|orthodontist|"
-    r"periodontist|endodontist|doctor|dr|physician|veterinarian|optometrist|"
-    r"chiropractor|partner|counsel|architect)\b\.?", re.I)
 # "Associé(e)" is a partner (co-owner) in French; "associé aux ventes" is a
 # sales associate.
 _PARTNER_ONLY = re.compile(
@@ -381,7 +377,7 @@ def _close_of(html: str, start: int, tag: str) -> int:
     """Index just past the element opened at ``start`` (same-tag depth
     count), looking no further than MAX_QUOTE_CHARS ahead; ``start`` when it
     doesn't close within that window."""
-    depth, pos = 0, start
+    depth = 0
     pattern = re.compile(rf"(?i)<(/?){re.escape(tag)}\b[^>]*?(/?)>")
     for m in pattern.finditer(html, start, min(len(html), start + MAX_QUOTE_CHARS)):
         if m.group(2):          # self-closing

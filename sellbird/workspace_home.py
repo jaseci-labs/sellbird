@@ -11,7 +11,7 @@ patch those globals keep working.
 import sys
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator, Literal
 

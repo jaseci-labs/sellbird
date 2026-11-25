@@ -14,7 +14,6 @@ from sellbird.integrations.mail_provider import InboundMessage, MailProvider, Se
 from sellbird.integrations.smtp_mail import SmtpImapProvider, SmtpSettings
 from sellbird.mailboxes import MAIN, ConnectRefused, MailboxStore
 from sellbird.secrets import MemorySecretBackend, SecretStore
-from sellbird.state import StateManager
 
 from tests.test_outbox_native import Cfg, Env, StubBrain, seed_campaign, seed_prospect
 

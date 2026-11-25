@@ -76,7 +76,6 @@ async def test_rules_never_run_on_an_email_the_built_in_checks_stopped(state, re
 
     async def anything(check):
         asked.append(check.item["to_email"])
-        return None
 
     registry.add_send_rule("ext.any", anything)
     item = await _queued(state)

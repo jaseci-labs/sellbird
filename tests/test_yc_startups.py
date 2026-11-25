@@ -136,7 +136,6 @@ def test_startup_databases_and_press_are_not_prospects(domain):
 
 def test_cli_estimate_with_the_preset(tmp_path, monkeypatch, capsys):
     import argparse
-    import asyncio
     from sellbird import cli
     import sellbird.config as config_mod
     import sellbird.state as state_mod

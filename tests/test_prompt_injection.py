@@ -284,7 +284,7 @@ async def test_autopilot_mail_with_a_foreign_link_goes_back_to_the_outbox():
 @pytest.mark.asyncio
 async def test_on_instantly_a_reply_with_a_foreign_link_goes_to_you(state, monkeypatch):
     import sellbird.agents.handler as handler_mod
-    from tests.test_outbox_native import Cfg, Env, FakeProvider, seed_prospect
+    from tests.test_outbox_native import Cfg, Env, seed_prospect
     from sellbird.agents.handler import Handler
     monkeypatch.setattr(handler_mod, "legacy_sending_held", lambda cfg: False)
     pid = await seed_prospect(state, status="contacted")

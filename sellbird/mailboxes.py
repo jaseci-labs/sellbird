@@ -46,7 +46,6 @@ logger = logging.getLogger("sellbird.mailboxes")
 MAIN = ""                       # the main mailbox's id
 PROVIDERS = ("google", "microsoft", "smtp")
 BUILT_IN_CONNECTIONS = ("oauth", "smtp")
-STATES = ("active", "retired")
 # A user's own number never goes past this per inbox: well below Google's and
 # Microsoft's daily sending limits.
 HARD_MAX_INBOX_CAP = 500

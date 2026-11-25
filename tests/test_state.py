@@ -1,6 +1,5 @@
 """Tests for state management (SQLite operations)."""
 
-import asyncio
 import tempfile
 import os
 

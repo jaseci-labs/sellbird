@@ -77,9 +77,8 @@ def in_quiet_hours(config: SellbirdConfig) -> bool:
 
     if start <= end:
         return start <= now <= end
-    else:
-        # Quiet hours cross midnight (e.g., 22:00 - 07:00)
-        return now >= start or now <= end
+    # Quiet hours cross midnight (e.g., 22:00 - 07:00)
+    return now >= start or now <= end
 
 
 def sends_through_quiet_hours(config: SellbirdConfig) -> bool:

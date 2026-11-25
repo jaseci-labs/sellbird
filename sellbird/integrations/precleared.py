@@ -109,7 +109,6 @@ UNKNOWN_ATTEMPTS = 3
 # Between unknown answers after the first retry (the sender's
 # ADDRESS_RETRY_AFTER comes first), long enough to fix the config.
 UNKNOWN_RETRY_AFTER = timedelta(hours=24)
-ADDRESS_SOURCES = ("published", "bought", "scraped", "given", "unknown")
 # Where the sender can be based: the countries whose rules Precleared applies.
 SENDER_COUNTRIES = PRECLEARED_SENDER_COUNTRIES
 # Precleared's limits for the company and person names sent with a check.

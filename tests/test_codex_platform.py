@@ -11,13 +11,10 @@ Two kinds of test, kept apart on purpose:
   process, and that Claude is unaffected. They run on every OS.
 """
 
-import asyncio
 import hashlib
-import json
 import os
 import sys
 import tempfile
-from pathlib import Path
 
 import pytest
 

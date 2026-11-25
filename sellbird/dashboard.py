@@ -123,13 +123,6 @@ async def query_db(sql: str, params: tuple = ()) -> list[dict]:
         return []
 
 
-def _mask_key(key: str) -> str:
-    """Mask an API key for display: show first 4 and last 4 chars."""
-    if not key or len(key) < 10:
-        return "****" if key else ""
-    return key[:4] + "****" + key[-4:]
-
-
 def _read_env_file() -> dict[str, str]:
     """Read .env file and return as dict."""
     env_vars = {}
@@ -720,8 +713,7 @@ async def test_instantly(request: Request):
             )
             if resp.status_code == 200:
                 return {"success": True, "message": "Connected to Instantly."}
-            else:
-                return {"success": False, "message": f"API returned {resp.status_code}. Check your key."}
+            return {"success": False, "message": f"API returned {resp.status_code}. Check your key."}
     except Exception as e:
         return {"success": False, "message": f"Connection failed: {str(e)}"}
 

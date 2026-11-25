@@ -1,11 +1,9 @@
 """Suppressions: addresses and domains never emailed, whoever asks."""
 
-import asyncio
 from datetime import datetime, timezone
 
 import pytest
 from sellbird.integrations.mail_provider import InboundMessage
-from sellbird.state import StateManager
 from tests.test_outbox_native import (  # noqa: F401  (state is a fixture)
     FakeProvider, make_handler, make_sender, seed_campaign, seed_prospect, state,
 )

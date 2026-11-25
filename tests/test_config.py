@@ -1,11 +1,8 @@
 """Tests for configuration loading."""
 
-import tempfile
-import os
 
-import yaml
 
-from sellbird.config import SellbirdConfig, EnvConfig, load_env
+from sellbird.config import SellbirdConfig, EnvConfig
 
 
 def test_config_from_dict():

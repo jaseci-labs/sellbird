@@ -58,3 +58,5 @@ sellbird.yaml.*
 harvey.local.yaml
 harvey.local.yaml.*
 harvey.yaml.*
+/pyproject.toml
+.jac/

@@ -10,7 +10,6 @@ import json
 import logging
 import random
 from datetime import date
-from pathlib import Path
 from typing import Optional
 from urllib.parse import quote_plus
 
@@ -31,7 +30,6 @@ USER_AGENT = (
 # Hard daily caps — conservative on purpose. LinkedIn restricts accounts
 # that view too many profiles or run too many searches per day.
 MAX_DAILY_SEARCH_PAGES = 20
-MAX_DAILY_PROFILE_VIEWS = 40
 MAX_SEARCH_PAGES_PER_QUERY = 5
 
 
@@ -374,60 +372,3 @@ class LinkedInAutomation:
             "linkedin_url": linkedin_url,
             "location": location,
         }
-
-    # ── Profiles ──
-
-    async def extract_profile(self, linkedin_url: str) -> Optional[dict]:
-        """Scrape a LinkedIn profile page for detailed info."""
-        if not self.page:
-            await self.start()
-            if not await self.login():
-                return None
-
-        if self._cap_reached("profile_views", MAX_DAILY_PROFILE_VIEWS):
-            return None
-
-        try:
-            await self.page.goto(linkedin_url, timeout=30000)
-        except Exception as e:
-            logger.warning(f"Failed to load profile {linkedin_url}: {e}")
-            return None
-
-        self._record("profile_views")
-        await self._random_delay(3, 5)
-        await self._wait_settled()
-        await self._humanlike_scroll()
-
-        try:
-            # Name
-            name_el = await self.page.query_selector("h1")
-            name = await name_el.inner_text() if name_el else ""
-
-            # Headline
-            headline_el = await self.page.query_selector("div.text-body-medium")
-            headline = await headline_el.inner_text() if headline_el else ""
-
-            # Location
-            loc_el = await self.page.query_selector("span.text-body-small.inline")
-            location = await loc_el.inner_text() if loc_el else ""
-
-            # About section
-            about_el = await self.page.query_selector(
-                "section.pv-about-section div.inline-show-more-text"
-            )
-            about = await about_el.inner_text() if about_el else ""
-
-            parts = name.strip().split(" ", 1)
-
-            return {
-                "first_name": parts[0] if parts else "",
-                "last_name": parts[1] if len(parts) > 1 else "",
-                "headline": headline.strip(),
-                "location": location.strip(),
-                "about": about.strip(),
-                "linkedin_url": linkedin_url,
-            }
-
-        except Exception as e:
-            logger.error(f"Error extracting profile {linkedin_url}: {e}")
-            return None

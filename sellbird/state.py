@@ -1782,11 +1782,6 @@ class StateManager:
             return rows[0].get("value_text") or ""
         return None
 
-    async def yc_search_hit(self, company_id: str) -> bool:
-        """Did a YC-preset search find this company (its latest YC reading
-        is a discovery hit)?"""
-        return await self.search_hit(company_id, "YC_BACKED")
-
     async def search_hit(self, company_id: str, signal_code: str) -> bool:
         """Is the company's latest reading of ``signal_code`` a preset
         search's hit (collector "discover")? Profiling doesn't write "not
@@ -2728,18 +2723,6 @@ class StateManager:
     async def usage_by_provider(self, days: int = 30) -> list[dict]:
         return await self._usage_grouped("provider", "provider", days)
 
-    async def usage_by_day(self, days: int = 30) -> list[dict]:
-        sql = (
-            f"SELECT date(created_at) AS day, {self._USAGE_SUM} "
-            f"FROM usage_events "
-            f"WHERE created_at >= datetime('now', ?) "
-            f"GROUP BY day ORDER BY day ASC"
-        )
-        async with self._connect() as db:
-            db.row_factory = aiosqlite.Row
-            async with db.execute(sql, (f"-{int(days)} days",)) as cursor:
-                return [self._usage_row_to_dict(r) for r in await cursor.fetchall()]
-
     async def usage_totals(self) -> dict:
         """Rollups for today / last 7 days / last 30 days (UTC)."""
         totals = {}
@@ -2809,4 +2792,3 @@ class StateManager:
             # Claude budget the rest of the loop is rationing.
             "unprofiled": await self.count_companies_needing_profile(),
         }
-

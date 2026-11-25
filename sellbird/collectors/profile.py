@@ -15,7 +15,7 @@ from html import unescape as html_unescape
 import random
 import re
 import unicodedata
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 from urllib.parse import urljoin, urlparse
 
 import httpx

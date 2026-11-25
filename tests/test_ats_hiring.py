@@ -6,7 +6,6 @@ links on its OWN site (never by guessing tokens), reads that one feed, and
 records the roles that match ``icp.hiring_signals`` (or ``icp.titles``).
 """
 
-import json
 import os
 import tempfile
 from types import SimpleNamespace

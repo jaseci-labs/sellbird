@@ -13,7 +13,6 @@ Sellbird helps design it instead of picking it alone:
 """
 
 import copy
-import json
 import logging
 from pathlib import Path
 

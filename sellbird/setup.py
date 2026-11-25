@@ -21,7 +21,6 @@ logger = logging.getLogger("sellbird.setup")
 from sellbird.paths import PROJECT_ROOT
 from sellbird.textio import read_user_text
 ENV_FILE = PROJECT_ROOT / ".env"
-ENV_EXAMPLE = PROJECT_ROOT / ".env.example"
 CONFIG_FILE = PROJECT_ROOT / "sellbird.yaml"
 
 
@@ -244,7 +243,7 @@ class SetupWizard:
 
     async def run(self):
         """Run the full interactive setup."""
-        print(f"""
+        print("""
 ╔══════════════════════════════════════════════════════════╗
 ║                                                          ║
 ║   Sellbird Setup Wizard                                    ║
@@ -917,7 +916,7 @@ class SetupWizard:
 
     async def _print_summary(self):
         """Print final summary and next steps."""
-        print(f"""
+        print("""
 ╔══════════════════════════════════════════════════════════╗
 ║                                                          ║
 ║   Setup Complete!                                        ║

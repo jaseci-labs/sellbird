@@ -88,7 +88,7 @@ LEGACY_BATCH_CAP = 50
 
 # The built-in "how" lines each prompt ends with: email 1 is an observation
 # and a question, with no pitch. Operator email rules replace exactly these.
-PERSONAL_SHAPE = f"""- 60 words at most, and aim for 30-50. Every word you cut raises the reply rate.
+PERSONAL_SHAPE = """- 60 words at most, and aim for 30-50. Every word you cut raises the reply rate.
 - One specific finding from the FACTS, what it likely costs them in one plain
   sentence, then YOUR OFFER below as the one question. Don't name the product.
 - Write the actual text (no merge variables: you know their name/company).

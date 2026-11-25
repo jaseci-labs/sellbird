@@ -160,35 +160,9 @@ class InstantlyClient:
             return result
         return None
 
-    async def get_campaign(self, campaign_id: str) -> dict | None:
-        """Get campaign details."""
-        result = await self._request("GET", f"/campaigns/{campaign_id}")
-        return result if isinstance(result, dict) else None
-
-    async def list_campaigns(self, limit: int = 100) -> list:
-        """List all campaigns."""
-        result = await self._request("GET", "/campaigns", params={"limit": limit})
-        return self._extract_items(result)
-
-    async def update_campaign_schedule(
-        self,
-        campaign_id: str,
-        schedule: dict,
-    ) -> dict | None:
-        """Update campaign sending schedule."""
-        result = await self._request(
-            "PATCH", f"/campaigns/{campaign_id}", {"schedule": schedule}
-        )
-        return result if isinstance(result, dict) else None
-
     async def activate_campaign(self, campaign_id: str) -> dict | None:
         """Start a campaign."""
         result = await self._request("POST", f"/campaigns/{campaign_id}/activate")
-        return result if isinstance(result, dict) else None
-
-    async def pause_campaign(self, campaign_id: str) -> dict | None:
-        """Pause a campaign."""
-        result = await self._request("POST", f"/campaigns/{campaign_id}/pause")
         return result if isinstance(result, dict) else None
 
     # ── Campaign Emails (Sequences) ──
@@ -247,21 +221,7 @@ class InstantlyClient:
         )
         return result if isinstance(result, dict) else None
 
-    async def get_lead(self, email: str) -> dict | None:
-        """Get lead details by email."""
-        result = await self._request("GET", "/leads", params={"email": email})
-        return result if isinstance(result, dict) else None
-
     # ── Replies / Emails ──
-
-    async def get_campaign_emails_sent(
-        self, campaign_id: str, limit: int = 100
-    ) -> list:
-        """Get emails sent for a campaign."""
-        result = await self._request(
-            "GET", "/emails", params={"campaign_id": campaign_id, "limit": limit}
-        )
-        return self._extract_items(result)
 
     async def get_replies(self, campaign_id: str | None = None) -> list:
         """Get replies, optionally filtered by campaign."""
@@ -280,23 +240,4 @@ class InstantlyClient:
             "/emails/reply",
             {"reply_to_uuid": reply_to_uuid, "body": body},
         )
-        return result if isinstance(result, dict) else None
-
-    # ── Analytics ──
-
-    async def get_campaign_analytics(self, campaign_id: str) -> dict | None:
-        """Get campaign performance stats."""
-        result = await self._request("GET", f"/campaigns/{campaign_id}/analytics")
-        return result if isinstance(result, dict) else None
-
-    # ── Account / Warmup ──
-
-    async def list_accounts(self) -> list:
-        """List connected email accounts."""
-        result = await self._request("GET", "/accounts")
-        return self._extract_items(result)
-
-    async def check_warmup_status(self, account_id: str) -> dict | None:
-        """Check warmup status for an email account."""
-        result = await self._request("GET", f"/accounts/{account_id}/warmup")
         return result if isinstance(result, dict) else None

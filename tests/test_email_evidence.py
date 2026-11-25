@@ -139,7 +139,6 @@ async def test_hunter_is_not_asked_twice_about_a_domain_it_had_no_pattern_for(mo
 
     async def hunter(domain, key):
         calls.append(domain)
-        return None
 
     monkeypatch.setattr(ef, "_hunter_domain_pattern", hunter)
     monkeypatch.setattr(ef, "_hunter_api_key", lambda: "k")
@@ -156,7 +155,6 @@ async def test_a_low_confidence_site_guess_still_gets_one_hunter_lookup(monkeypa
 
     async def hunter(domain, key):
         calls.append(domain)
-        return None
 
     monkeypatch.setattr(ef, "_hunter_domain_pattern", hunter)
     monkeypatch.setattr(ef, "_hunter_api_key", lambda: "k")

@@ -172,14 +172,6 @@ def load() -> None:
         logger.info(f"Loaded the Sellbird extension {ep.name!r}.")
 
 
-def reset_for_tests() -> Registry:
-    """Empty the registry and mark it loaded, so a test registers exactly what it needs."""
-    global _REGISTRY, _LOADED
-    _REGISTRY = Registry()
-    _LOADED = True
-    return _REGISTRY
-
-
 async def run_tick_steps(config, state, *, timeout: float = TICK_STEP_TIMEOUT_SECONDS) -> dict[str, str]:
     """Run every registered tick step once, in registration order. Returns
     ``{name: "ok" | "failed" | "timed out"}``."""

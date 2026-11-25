@@ -46,16 +46,6 @@ class PipelineReport:
             "errors": self.errors,
         }
 
-    def summary_line(self) -> str:
-        parts = []
-        if self.discover:
-            parts.append(f"{self.discover.get('new_companies', 0)} new companies")
-        if self.profiled_companies:
-            parts.append(f"{self.profiled_companies} profiled "
-                         f"({self.profile_observations} observations)")
-        return ", ".join(parts) or "nothing to do"
-
-
 async def run_profile_stage(
     state,
     limit: int = 100,

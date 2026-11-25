@@ -11,9 +11,6 @@ from __future__ import annotations
 import logging
 import re
 
-# Loggers that print full request URLs at INFO/DEBUG.
-NOISY_HTTP_LOGGERS = ("httpx", "httpcore")
-
 # ?api_key=..., &apiKey=..., &token=..., &client_secret=..., &password=...
 _SECRET_PARAM = re.compile(
     r"([?&][^=&\s#\"'<>]*(?:key|token|secret|password)[^=&\s#\"'<>]*=)[^&\s#\"'<>]+",
@@ -26,11 +23,6 @@ MASK = "***"
 def redact(text: str) -> str:
     """Mask the values of secret-looking query parameters in text."""
     return _SECRET_PARAM.sub(lambda m: m.group(1) + MASK, text)
-
-
-def quiet_http_loggers() -> None:
-    for name in NOISY_HTTP_LOGGERS:
-        logging.getLogger(name).setLevel(logging.WARNING)
 
 
 class RedactSecrets(logging.Filter):

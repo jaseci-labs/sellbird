@@ -704,7 +704,7 @@ async def test_tinyfish_adapter_pagination():
         if page == "0":
             items = [{"position": i + 1, "url": f"https://biz{i}.example", "title": f"Biz {i}"} for i in range(10)]
             return httpx.Response(200, json={"results": items, "page": 0})
-        elif page == "1":
+        if page == "1":
             return httpx.Response(200, json=TINYFISH_RESPONSE_P1)
         return httpx.Response(200, json={"results": [], "page": int(page)})
 
