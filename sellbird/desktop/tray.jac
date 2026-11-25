@@ -12,7 +12,6 @@ import time;
 import webbrowser;
 import from dataclasses { dataclass }
 import from pathlib { Path }
-import from typing { Callable }
 import httpx;
 
 glob logger = logging.getLogger("sellbird.tray"),
@@ -29,6 +28,7 @@ glob logger = logging.getLogger("sellbird.tray"),
      BIRD_PATH = "M83 0C246 47 417 91 562 157C676 209 759 258 744 314C813 257 896 239 954 301L1034 324L944 359C837 473 731 548 563 524C506 516 464 513 427 519L0 631L407 406L224 213L555 300L420 428L663 315L630 281C407 229 264 237 83 0Z",
      BIRD_BOX = (1040, 640),
      MENUBAR_PT = (31, 18),
+     _NO_TRAY = "The menu-bar icon runs on macOS and Windows. On Linux, run `sellbird dashboard` and `sellbird run` in a terminal or as services.",
      _ACTIONS = ("start_loop", "stop_loop", "pause_sending", "resume_sending", "start_dashboard");
 
 class TrayUnavailable(Exception) {}
@@ -55,11 +55,10 @@ def resolve_port(data_dir: Path, port: int | None) -> int {
     }
     try {
         saved = json.loads((Path(data_dir) / TRAY_JSON).read_text(encoding="utf-8"))["port"];
-        if isinstance(saved, int) and 1 <= saved and saved <= 65535 {
-            return saved;
-        }
-    } except (OSError, ValueError, KeyError, TypeError) {}
-    return DEFAULT_PORT;
+    } except (OSError, ValueError, KeyError, TypeError) {
+        saved = None;
+    }
+    return saved if isinstance(saved, int) and 1 <= saved and saved <= 65535 else DEFAULT_PORT;
 }
 
 def remember_port(data_dir: Path, port: int) {
@@ -68,21 +67,18 @@ def remember_port(data_dir: Path, port: int) {
 }
 
 def dashboard_command(port: int, platform: str = sys.platform) -> list[str] {
-    python: str = sys.executable;
-    pythonw = Path(python).with_name("pythonw.exe");
-    if platform == "win32" and pythonw.exists() {
-        python = str(pythonw);
-    }
+    pythonw = Path(sys.executable).with_name("pythonw.exe");
+    python = str(pythonw) if platform == "win32" and pythonw.exists() else sys.executable;
     return [python, "-P", "-m", "sellbird", "dashboard", "--port", str(port)];
 }
 
 def default_launcher(argv: list[str], log_path: Path) {
     log_path.parent.mkdir(parents=True, exist_ok=True);
-    kwargs: dict[str, any] = {
-        "creationflags": subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS,
+    kwargs: dict[str, any] = {"start_new_session": True};
+    if sys.platform == "win32" {
+        flags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS;
+        kwargs = {"creationflags": flags};
     }
-        if sys.platform == "win32"
-        else {"start_new_session": True};
     fd = os.open(log_path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600);
     with os.fdopen(fd, "a", encoding="utf-8") as log {
         subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=log, stderr=log, **kwargs);
@@ -111,20 +107,14 @@ class TrayController {
         data_dir: Path,
         port: int = DEFAULT_PORT,
         *,
-        transport: httpx.BaseTransport | None = None,
-        launcher: Callable[[list[str], Path], None] = default_launcher,
-        opener: Callable[[str], object] = webbrowser.open,
-        sleep: Callable[[float], None] = time.sleep,
-        clock: Callable[[], float] = time.monotonic,
+        transport: any = None,
+        launcher: any = default_launcher,
+        opener: any = webbrowser.open,
+        sleep: any = time.sleep,
+        clock: any = time.monotonic,
     ) {
-        self.data_dir = Path(data_dir);
-        self.port = port;
-        self._transport = transport;
-        self._launcher = launcher;
-        self._opener = opener;
-        self._sleep = sleep;
-        self._clock = clock;
-        self._starting_until = 0.0;
+        (self.data_dir, self.port, self._transport) = (Path(data_dir), port, transport);
+        (self._launcher, self._opener, self._sleep, self._clock) = (launcher, opener, sleep, clock);
     }
 
     def _client(base: str) -> httpx.Client {
@@ -173,18 +163,14 @@ class TrayController {
     def status -> TrayStatus {
         (code, loop) = self._call("GET", "/api/sellbird/status");
         if code == 0 {
-            return TrayStatus(
-                "starting" if self._clock() < self._starting_until else "stopped", "unknown"
-            );
+            starting = self._clock() < self._starting_until;
+            return TrayStatus("starting" if starting else "stopped", "unknown");
         }
         if code in (401, 403) {
             return TrayStatus("running", "unknown", error=SIGNED_OUT);
         }
-        return TrayStatus(
-            "running",
-            "running" if loop.get("running") else "stopped",
-            sending_paused=loop.get("sending_paused") or "",
-        );
+        running = "running" if loop.get("running") else "stopped";
+        return TrayStatus("running", running, sending_paused=loop.get("sending_paused") or "");
     }
 
     def start_dashboard -> str {
@@ -228,12 +214,11 @@ class TrayController {
     }
 
     def open_dashboard -> bool {
-        info = dashboard_instance.read(self.data_dir);
-        if info is None or self._base() is None {
+        if (base := self._base()) is None {
             return False;
         }
         token = _read_user_token(self.data_dir);
-        self._opener(base_url(info.host, info.port) + (f"#token={token}" if token else ""));
+        self._opener(base + (f"#token={token}" if token else ""));
         return True;
     }
 }
@@ -242,20 +227,13 @@ def state_label(status: TrayStatus) -> str {
     if status.dashboard != "running" {
         return "starting…" if status.dashboard == "starting" else "not running";
     }
-    if status.error {
-        return "signed out";
-    }
-    if status.loop != "running" {
-        return "stopped";
-    }
-    return "running, sending paused" if status.sending_paused else "running";
+    running = "running, sending paused" if status.sending_paused else "running";
+    return "signed out" if status.error else ("stopped" if status.loop != "running" else running);
 }
 
 def icon_state(status: TrayStatus) -> str {
-    if status.dashboard != "running" {
-        return "stopped";
-    }
-    return "paused" if status.loop != "running" or status.sending_paused else "running";
+    paused = status.loop != "running" or status.sending_paused;
+    return "stopped" if status.dashboard != "running" else ("paused" if paused else "running");
 }
 
 def menu_items(status: TrayStatus, autostart_on: bool) -> list[MenuRow] {
@@ -284,9 +262,7 @@ def _cubic(a: float, b: float, c: float, d: float, t: float) -> float {
     return u ** 3 * a + 3 * u * u * t * b + 3 * u * t * t * c + t ** 3 * d;
 }
 
-def bird_points(
-    width: float, height: float, x0: float = 0, y0: float = 0, steps: int = 16
-) -> list[tuple[float, float]] {
+def bird_points(width: float, height: float, x0: float = 0, y0: float = 0, steps: int = 16) -> any {
     pts: list[tuple[float, float]] = [];
     cur = (0.0, 0.0);
     for (cmd, args) in re.findall(r"([MLCZ])([^MLCZ]*)", BIRD_PATH) {
@@ -294,10 +270,7 @@ def bird_points(
         if cmd == "C" {
             for k in range(1, steps + 1) {
                 t = k / steps;
-                pts.append((
-                    _cubic(cur[0], nums[0], nums[2], nums[4], t),
-                    _cubic(cur[1], nums[1], nums[3], nums[5], t),
-                ));
+                pts.append((_cubic(cur[0], *nums[0:5:2], t), _cubic(cur[1], *nums[1:6:2], t)));
             }
             cur = (nums[4], nums[5]);
         } elif cmd != "Z" {
@@ -314,12 +287,8 @@ def _dark_bar -> bool {
         return True;
     }
     try {
-        out = subprocess.run(
-            ["defaults", "read", "-g", "AppleInterfaceStyle"],
-            capture_output=True,
-            text=True,
-            timeout=2,
-        ).stdout;
+        argv = ["defaults", "read", "-g", "AppleInterfaceStyle"];
+        out = subprocess.run(argv, capture_output=True, text=True, timeout=2).stdout;
     } except (OSError, subprocess.SubprocessError) {
         return False;
     }
@@ -329,25 +298,23 @@ def _dark_bar -> bool {
 def draw_icon(state: str, dark: bool, width: int, height: int) -> any {
     Image = importlib.import_module("PIL.Image");
     ImageDraw = importlib.import_module("PIL.ImageDraw");
-    ss = 4;
-    (w, h) = (width * ss, height * ss);
+    (w, h) = (width * 4, height * 4);
     image = Image.new("RGBA", (w, h), (0, 0, 0, 0));
-    draw = ImageDraw.Draw(image);
     (r, ring) = (h * 0.14, h * 0.05);
     wide = w > h * 1.4;
     unit = min((w - (r if wide else 0)) / BIRD_BOX[0], h * 0.94 / BIRD_BOX[1]);
     (bird_w, bird_h) = (BIRD_BOX[0] * unit, BIRD_BOX[1] * unit);
     (left, top) = (0 if wide else (w - bird_w) / 2, (h - bird_h) / 2);
-    draw.polygon(bird_points(bird_w, bird_h, left, top), fill="#ffffff" if dark else "#1d1d1f");
+    ImageDraw.Draw(image).polygon(
+        bird_points(bird_w, bird_h, left, top), fill="#ffffff" if dark else "#1d1d1f"
+    );
     (cx, cy) = (w - r - ring, h - r - ring);
     hole = Image.new("L", (w, h), 0);
-    ImageDraw.Draw(hole).ellipse(
-        (cx - r - ring, cy - r - ring, cx + r + ring, cy + r + ring), fill=255
-    );
+    outer = r + ring;
+    ImageDraw.Draw(hole).ellipse((cx - outer, cy - outer, cx + outer, cy + outer), fill=255);
     image.paste((0, 0, 0, 0), mask=hole);
-    ImageDraw.Draw(image).ellipse(
-        (cx - r, cy - r, cx + r, cy + r), fill=COLORS.get(state, COLORS["stopped"])
-    );
+    dot = COLORS.get(state, COLORS["stopped"]);
+    ImageDraw.Draw(image).ellipse((cx - r, cy - r, cx + r, cy + r), fill=dot);
     return image.resize((width, height), Image.LANCZOS);
 }
 
@@ -391,7 +358,7 @@ def _autostart_on -> bool {
     return bool(state["installed"] and state["ours"]);
 }
 
-def _spawn(fn: Callable[[], None]) {
+def _spawn(fn: any) {
     threading.Thread(target=fn, daemon=True).start();
 }
 
@@ -405,9 +372,8 @@ def main_thread_scheduler(platform: str = sys.platform) -> any {
 }
 
 def _menu_item(pystray: any, row: MenuRow, action: any) -> any {
-    checked = (lambda (item: any) -> bool { row.checked })
-        if row.action == "toggle_autostart"
-        else None;
+    toggle = row.action == "toggle_autostart";
+    checked = (lambda (item: any) -> bool { row.checked }) if toggle else None;
     return pystray.MenuItem(row.label, action, checked=checked, enabled=row.enabled);
 }
 
@@ -417,32 +383,25 @@ class TrayApp {
         _autostart: any = None,
         _spawn: any = None,
         _ui: any = None,
-        status: any = None,
+        status: any = TrayStatus("stopped", "unknown"),
         autostart_on: bool = False,
         icon: any = None,
         _drawn: any = None,
-        _lock: any = None;
+        _lock: any = threading.Lock();
 
     def init(
-        controller: TrayController,
+        controller: any,
         pystray: any,
         *,
-        autostart: Callable[[], bool] | None = None,
-        `spawn: Callable[[Callable[[], None]], None] = _spawn,
-        ui: Callable[[Callable[[], None]], None] | None = None,
+        autostart: any = None,
+        `spawn: any = _spawn,
+        ui: any = None,
     ) {
-        self.controller = controller;
-        self.pystray = pystray;
+        (self.controller, self.pystray, self._spawn) = (controller, pystray, `spawn);
         self._autostart = autostart
             if autostart is not None
             else (lambda -> bool { _autostart_on() });
-        self._spawn = `spawn;
         self._ui = ui if ui is not None else main_thread_scheduler();
-        self.status = TrayStatus("stopped", "unknown");
-        self.autostart_on = False;
-        self.icon = None;
-        self._drawn = None;
-        self._lock = threading.Lock();
     }
 
     def refresh(*, autostart: bool = False) {
@@ -486,14 +445,13 @@ class TrayApp {
         with self._lock {
             rows = menu_items(self.status, self.autostart_on);
         }
-        return [
-            _menu_item(self.pystray, row, None if row.action is None else self._handler(row.action))
-            for row in rows
-        ];
+        return [_menu_item(self.pystray, row, self._handler(row.action)) for row in rows];
     }
 
-    def _handler(action: str) -> any {
-        return lambda (icon: any, item: any) { self.dispatch(action) };
+    def _handler(action: str | None) -> any {
+        return None
+            if action is None
+            else (lambda (icon: any, item: any) { self.dispatch(action) });
     }
 
     def dispatch(action: str) {
@@ -553,16 +511,14 @@ def run_tray(
     *,
     controller: TrayController | None = None,
     platform: str = sys.platform,
-    autostart: Callable[[], bool] | None = None,
+    autostart: any = None,
     refresh_every: float | None = REFRESH_SECONDS,
-    ui: Callable[[Callable[[], None]], None] | None = None,
+    ui: any = None,
 ) {
     try {
         pystray = builtins.__import__("pystray");
     } except ImportError {
-        raise TrayUnavailable(
-            "The menu-bar icon runs on macOS and Windows. On Linux, run `sellbird dashboard` and `sellbird run` in a terminal or as services.",
-        ) from None;
+        raise TrayUnavailable(_NO_TRAY) from None;
     }
     data_dir = Path(data_dir);
     lock = hold_loop_lock(data_dir / TRAY_LOCK);
@@ -577,12 +533,8 @@ def run_tray(
         if controller is None {
             controller = TrayController(data_dir, port=resolve_port(data_dir, port));
         }
-        app = TrayApp(
-            controller,
-            pystray,
-            autostart=autostart,
-            ui=ui if ui is not None else main_thread_scheduler(platform),
-        );
+        ui = ui if ui is not None else main_thread_scheduler(platform);
+        app = TrayApp(controller, pystray, autostart=autostart, ui=ui);
         stop = threading.Event();
         def refresher {
             while not stop.wait(refresh_every) {
@@ -602,12 +554,8 @@ def run_tray(
                 threading.Thread(target=refresher, daemon=True).start();
             }
         }
-        icon = pystray.Icon(
-            "sellbird",
-            icon=make_icon("stopped"),
-            title="Sellbird",
-            menu=pystray.Menu(app.menu_items),
-        );
+        menu = pystray.Menu(app.menu_items);
+        icon = pystray.Icon("sellbird", icon=make_icon("stopped"), title="Sellbird", menu=menu);
         _sharp_on_retina(icon);
         app.icon = icon;
         try {
