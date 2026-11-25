@@ -1,12 +1,4 @@
-"""Sellbird's main heartbeat loop."""
-
-import builtins;
-
-import operator;
-
 import asyncio;
-
-import from typing { Any }
 
 import logging;
 
@@ -18,19 +10,19 @@ import from datetime { datetime, time, timedelta }
 
 import pytz;
 
-glob logger: any;
+glob ERROR_BACKOFF_BASE = 60,
+     ERROR_BACKOFF_CAP = 900,
+     CYCLE_TIMEOUT_SECONDS = 600,
+     QUIET_HOURS_POLL_SECONDS = 300,
+     REPLY_READERS = ("handle_replies", "read_replies"),
+     PROSPECT_BACKLOG = 20,
+     logger = logging.getLogger("sellbird");
 
-glob ERROR_BACKOFF_BASE: any;
-
-glob ERROR_BACKOFF_CAP: any;
-
-glob CYCLE_TIMEOUT_SECONDS: any;
-
-glob QUIET_HOURS_POLL_SECONDS: any;
-
-glob REPLY_READERS: any;
-
-glob PROSPECT_BACKLOG: any;
+def quiet_http_client_logs {
+    for name in ("httpx", "httpcore") {
+        logging.getLogger(name).setLevel(logging.WARNING);
+    }
+}
 
 with entry {
     logging.basicConfig(
@@ -38,63 +30,23 @@ with entry {
         format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     );
-    logger = logging.getLogger("sellbird");
-}
-
-"""Keep request URLs out of the terminal.
-
-    httpx logs every request at INFO ("HTTP Request: GET https://...") with
-    the full query string. Reoon and ZeroBounce only accept their API key as
-    a query parameter, so at INFO `sellbird run` would print those keys in
-    clear text on every verification. Nothing in those lines is useful to a
-    user, so both client loggers sit at WARNING.
-    """
-def quiet_http_client_logs -> any {
-    for name in ("httpx", "httpcore") {
-        logging.getLogger(name).setLevel(logging.WARNING);
-    }
-}
-
-with entry {
     quiet_http_client_logs();
-    ERROR_BACKOFF_BASE = 60;
-    ERROR_BACKOFF_CAP = 900;
-    CYCLE_TIMEOUT_SECONDS = 600;
-    QUIET_HOURS_POLL_SECONDS = 300;
-    REPLY_READERS = ("handle_replies", "read_replies");
 }
 
-"""Check if we're currently in quiet hours."""
-def in_quiet_hours(config: SellbirdConfig) -> builtins.bool {
-    qh: any = config.usage.quiet_hours;
-    tz: any = pytz.timezone(qh.timezone);
-    now: any = datetime.now(tz).time();
-    start: any = time.fromisoformat(qh.start);
-    end: any = time.fromisoformat(qh.end);
+def in_quiet_hours(config: SellbirdConfig) -> bool {
+    qh = config.usage.quiet_hours;
+    tz = pytz.timezone(qh.timezone);
+    now = datetime.now(tz).time();
+    start = time.fromisoformat(qh.start);
+    end = time.fromisoformat(qh.end);
 
-    if start <= end {
-        return operator.le(start, now) and operator.le(now, end);
-    }
-    return operator.ge(now, start) or operator.le(now, end);
+    return start <= now and now <= end if start <= end else now >= start or now <= end;
 }
 
-"""True when quiet hours pause Sellbird's own work but not cold email
-    that is due in its recipient's window.
-
-    With a send window in each recipient's time zone, the operator's night
-    can be a recipient's morning. Prospecting and writing still sleep, and
-    replies wait for the operator's hours as before. A heartbeat wakes only
-    when a cold email can go now (Sender.cold_due_in_window): it reads and
-    handles replies first (so stop-on-reply has run; reading a reply is what
-    consumes it, so it can't be left for the morning), then runs the sender,
-    which stages any draft campaign into the outbox (no model call, nothing
-    sent) and sends only cold email. Otherwise it does nothing. Native mail
-    providers only.
-    """
-def sends_through_quiet_hours(config: SellbirdConfig) -> builtins.bool {
-    email: any = config.channels.email;
-    window: any = send_window_of(config);
-    return `bool(
+def sends_through_quiet_hours(config: SellbirdConfig) -> bool {
+    email = config.channels.email;
+    window = send_window_of(config);
+    return bool(
         window is not None
             and window.recipient_timezone
             and email.enabled
@@ -102,78 +54,47 @@ def sends_through_quiet_hours(config: SellbirdConfig) -> builtins.bool {
     );
 }
 
-"""Calculate seconds until quiet hours end."""
-def seconds_until_quiet_hours_end(config: SellbirdConfig) -> builtins.int {
-    qh: any = config.usage.quiet_hours;
-    tz: any = pytz.timezone(qh.timezone);
-    now: any = datetime.now(tz);
-    end: any = time.fromisoformat(qh.end);
-    end_today: any = now.replace(hour=end.hour, minute=end.minute, second=0, microsecond=0);
+def seconds_until_quiet_hours_end(config: SellbirdConfig) -> int {
+    qh = config.usage.quiet_hours;
+    tz = pytz.timezone(qh.timezone);
+    now = datetime.now(tz);
+    end = time.fromisoformat(qh.end);
+    end_today = now.replace(hour=end.hour, minute=end.minute, second=0, microsecond=0);
 
     if end_today <= now {
-        end_today = end_today + timedelta(days=1);
+        end_today += timedelta(days=1);
     }
-
-    delta: any = end_today - now;
-    return max(`int(delta.total_seconds()), 60);
+    return max(int((end_today - now).total_seconds()), 60);
 }
 
-with entry {
-    PROSPECT_BACKLOG = 20;
-}
-
-"""(all 'new' prospects, the ones the Writer can draft for)."""
-def _new_counts(summary: builtins.dict) -> builtins.tuple[builtins.int, builtins.int] {
-    prospects: any = summary.get("prospects") or {};
-    new: any = (prospects.get("new", 0) if isinstance(prospects, `dict) else 0) or 0;
-    writable: any = summary.get("writable_prospects", new) or 0;
+def _new_counts(summary: dict[str, any]) -> tuple[int, int] {
+    prospects = summary.get("prospects") or {};
+    new = (prospects.get("new", 0) if isinstance(prospects, dict) else 0) or 0;
+    writable = summary.get("writable_prospects", new) or 0;
     return (new, writable);
 }
 
-"""Why Sellbird paused prospecting for the day, or ""."""
-def unusable_backlog_notice(summary: builtins.dict) -> builtins.str {
-    _: any;
-    writable: any;
+def unusable_backlog_notice(summary: dict[str, any]) -> str {
     (_, writable) = _new_counts(summary) as any;
-    recent: any = summary.get("recent_unusable_prospects", 0) or 0;
+    recent = summary.get("recent_unusable_prospects", 0) or 0;
     if writable or recent < PROSPECT_BACKLOG {
         return "";
     }
     return f"Sellbird found {recent} prospects in the last day, but none has a verified or catch-all email, so it paused prospecting for about a day to save search and verifier credits. Add an email verifier key (REOON_API_KEY, ZEROBOUNCE_API_KEY or HUNTER_API_KEY in .env) or check it still has credits. `sellbird export --all` exports the list as it is.";
 }
 
-"""Decide what Sellbird should do next based on current state.
-
-    Uses deterministic priority rules (send_campaign > write_campaign >
-    prospect > idle) instead of burning a Claude call on a decision that is
-    fully derivable from pipeline counts. This saves budget every cycle and
-    removes a fragile LLM string-parsing step.
-
-    Replies are not an action here: the handler rides along every cycle
-    there is a mailbox or an open conversation to read. Making an open
-    conversation the top priority starved everything else for as long as it
-    stayed open, and one waiting on the prospect can stay open for weeks.
-    """
 async def decide_next_action(
-    brain: Brain, state: StateManager, config: SellbirdConfig, summary: builtins.dict | None = None
-) -> builtins.str {
+    brain: Brain, state: StateManager, config: SellbirdConfig, summary: dict[str, any] | None = None
+) -> str {
     if summary is None {
         summary = await state.get_state_summary();
     }
-    new_prospects: any;
-    writable: any;
     (new_prospects, writable) = _new_counts(summary) as any;
-    draft_campaigns: any = summary.get("draft_campaigns", 0) or 0;
-    loose: Any = config;
-    email: any = getattr(getattr(loose, "channels", None), "email", None);
-    native_paused: any = summary.get("sending_paused")
-        and operator.ne(getattr(email, "provider", ""), "instantly");
-    held: any = legacy_sending_held(config) or native_paused or not getattr(email, "enabled", True);
-    deployable: any = 0 if held else draft_campaigns;
-
-    if deployable > 0 {
-        action: any;
-        reason: any;
+    draft_campaigns = summary.get("draft_campaigns", 0) or 0;
+    email = getattr(getattr(config as any, "channels", None), "email", None);
+    native_paused = summary.get("sending_paused") and getattr(email, "provider", "") != "instantly";
+    held = legacy_sending_held(config) or native_paused or not getattr(email, "enabled", True);
+    if not held and draft_campaigns > 0 {
         (action, reason) = (
             "send_campaign",
             f"{draft_campaigns} draft campaign(s) ready to deploy",
@@ -194,14 +115,7 @@ async def decide_next_action(
     return action;
 }
 
-"""Run (name, coroutine) pairs in parallel; return {name: outcome}.
-
-    Errors are caught per task so one bad agent never takes down the cycle,
-    and the whole batch is bounded so one HUNG agent (no exception, just
-    never returns) can't either. A task's outcome is what it returned, or
-    the exception it raised; a task cut off by the bound has no outcome.
-    """
-async def _run_agents(tasks: builtins.list) -> builtins.dict {
+async def _run_agents(tasks: list[any]) -> dict[str, any] {
     if not tasks {
         return {};
     }
@@ -209,7 +123,7 @@ async def _run_agents(tasks: builtins.list) -> builtins.dict {
         logger.info(f"Running {len(tasks)} agents in parallel: {[t[0] for t in tasks]}");
     }
     try {
-        results: any = await asyncio.wait_for(
+        results = await asyncio.wait_for(
             asyncio.gather(*[t[1] for t in tasks], return_exceptions=True),
             timeout=CYCLE_TIMEOUT_SECONDS,
         );
@@ -219,7 +133,7 @@ async def _run_agents(tasks: builtins.list) -> builtins.dict {
         );
         results = [];
     }
-    outcomes: any = {};
+    outcomes: dict[str, any] = {};
     for ((name, _), result) in zip(tasks, results) {
         if isinstance(result, asyncio.CancelledError) {
             raise result;
@@ -232,13 +146,7 @@ async def _run_agents(tasks: builtins.list) -> builtins.dict {
     return outcomes;
 }
 
-"""Sleep up to `seconds`, waking immediately on shutdown.
-
-    Returns True if a shutdown was requested during the sleep.
-    """
-async def _interruptible_sleep(
-    seconds: builtins.float, stop_event: asyncio.Event
-) -> builtins.bool {
+async def _interruptible_sleep(seconds: float, stop_event: asyncio.Event) -> bool {
     try {
         await asyncio.wait_for(stop_event.wait(), timeout=seconds);
         return True;
@@ -247,24 +155,14 @@ async def _interruptible_sleep(
     }
 }
 
-"""What to record about this cycle's send phase: why sending is held by
-    unread replies, "" when it ran (clear the note), or None to leave the
-    note alone (a paused brain has its own Today card)."""
-def send_hold_reason(
-    unread: builtins.list, paused: builtins.str, read_problem: builtins.str
-) -> builtins.str | None {
+def send_hold_reason(unread: list[any], paused: str, read_problem: str) -> str | None {
     if paused {
         return None;
     }
-    if unread {
-        return read_problem or "replies couldn't all be read and handled.";
-    }
-    return "";
+    return read_problem or "replies couldn't all be read and handled." if unread else "";
 }
 
-"""Note why sending was held this cycle (Today and `sellbird status` show
-    it), or clear the note when sending ran. Never stops the loop."""
-async def record_send_phase(state, held_reason: builtins.str) -> any {
+async def record_send_phase(state: any, held_reason: str) {
     try {
         if held_reason {
             await state.note_sends_held(held_reason);
@@ -276,8 +174,7 @@ async def record_send_phase(state, held_reason: builtins.str) -> any {
     }
 }
 
-"""Sellbird's main loop. Wakes up, decides, acts, sleeps. Repeat."""
-async def heartbeat(stop_event: asyncio.Event | None = None) -> any {
+async def heartbeat(stop_event: asyncio.Event | None = None) {
     if stop_event is None {
         stop_event = asyncio.Event();
     }
@@ -287,17 +184,14 @@ async def heartbeat(stop_event: asyncio.Event | None = None) -> any {
     logger.info("=" * 60);
 
     try {
-        config: any = load_config();
-    } except (ConfigError, Exception) as e {
-        if isinstance(e, (KeyboardInterrupt, asyncio.CancelledError)) {
-            raise;
-        }
+        config = load_config();
+    } except Exception as e {
         logger.error(f"Cannot start — configuration error:\n{e}");
         return;
     }
-    env: any = load_env();
-    state: any = StateManager();
-    brain: any = Brain(state, config.brain);
+    env = load_env();
+    state = StateManager();
+    brain = Brain(state, config.brain);
     logger.info(
         f"Thinking with {brain.provider_label}"
             + (f" ({brain.model})" if brain.model else "")
@@ -319,63 +213,59 @@ async def heartbeat(stop_event: asyncio.Event | None = None) -> any {
     import from sellbird.agents.handler { Handler }
     import from sellbird.agents.analyst { Analyst }
 
-    scout: any = Scout(brain, state, config, env);
-    writer: any = Writer(brain, state, config, env);
-    sender: any = Sender(brain, state, config, env);
-    handler: any = Handler(brain, state, config, env);
-    analyst: any = Analyst(state);
+    scout = Scout(brain, state, config, env);
+    writer = Writer(brain, state, config, env);
+    sender = Sender(brain, state, config, env);
+    handler = Handler(brain, state, config, env);
+    analyst = Analyst(state);
 
-    interval: any = config.usage.heartbeat_interval_minutes * 60;
-    max_calls: any = max(`int(200 * (config.usage.max_daily_claude_percent / 100)), 1);
-    consecutive_errors: any = 0;
+    interval = config.usage.heartbeat_interval_minutes * 60;
+    max_calls = max(int(200 * (config.usage.max_daily_claude_percent / 100)), 1);
+    consecutive_errors = 0;
 
     while not stop_event.is_set() {
         try {
             await sync_sending_mode(config, state);
-            quiet: any = in_quiet_hours(config);
-            send_only: any = quiet and sender.is_native and sends_through_quiet_hours(config);
+            quiet = in_quiet_hours(config);
+            send_only = quiet and sender.is_native and sends_through_quiet_hours(config);
             if quiet and not send_only {
-                sleep_for: any = seconds_until_quiet_hours_end(config);
-                logger.info(f"Quiet hours. Sleeping for {sleep_for // 60} minutes.");
-                shutting_down: any = False;
-                while in_quiet_hours(config) {
-                    if await _interruptible_sleep(QUIET_HOURS_POLL_SECONDS, stop_event) {
-                        shutting_down = True;
-                        break;
-                    }
+                logger.info(
+                    f"Quiet hours. Sleeping for {seconds_until_quiet_hours_end(config) // 60} minutes.",
+                );
+                stopping = False;
+                while not stopping and in_quiet_hours(config) {
+                    stopping = await _interruptible_sleep(QUIET_HOURS_POLL_SECONDS, stop_event);
                 }
-                if shutting_down {
+                if stopping {
                     break;
                 }
                 continue;
             }
             sender.cold_only = send_only;
+            nap = 0;
             if send_only and not await sender.cold_due_in_window() {
                 logger.info(
                     f"Quiet hours. No cold email can go now; checking again in {config.usage.heartbeat_interval_minutes} minutes.",
                 );
-                if await _interruptible_sleep(interval, stop_event) {
-                    break;
+                nap = interval;
+            } else {
+                problem = await brain.preflight();
+                if problem {
+                    logger.error(
+                        f"Sellbird is paused: {problem} Nothing was sent or changed. Re-checking in {config.usage.heartbeat_interval_minutes} minutes.",
+                    );
+                    nap = interval;
+                } elif not await brain.is_within_budget(
+                    max_calls, max_percent=config.usage.max_daily_claude_percent
+                ) {
+                    logger.info(
+                        f"{brain.provider_label} usage limit reached ({config.usage.max_daily_claude_percent}% of quota or {max_calls} calls). Sleeping 1h, then re-checking.",
+                    );
+                    nap = 3600;
                 }
-                continue;
             }
-            problem: any = await brain.preflight();
-            if problem {
-                logger.error(
-                    f"Sellbird is paused: {problem} Nothing was sent or changed. Re-checking in {config.usage.heartbeat_interval_minutes} minutes.",
-                );
-                if await _interruptible_sleep(interval, stop_event) {
-                    break;
-                }
-                continue;
-            }
-            if not await brain.is_within_budget(
-                max_calls, max_percent=config.usage.max_daily_claude_percent
-            ) {
-                logger.info(
-                    f"{brain.provider_label} usage limit reached ({config.usage.max_daily_claude_percent}% of quota or {max_calls} calls). Sleeping 1h, then re-checking.",
-                );
-                if await _interruptible_sleep(3600, stop_event) {
+            if nap {
+                if await _interruptible_sleep(nap, stop_event) {
                     break;
                 }
                 continue;
@@ -384,17 +274,17 @@ async def heartbeat(stop_event: asyncio.Event | None = None) -> any {
                 logger.info(
                     "Quiet hours: reading replies, then sending what's due in recipients' own time zones.",
                 );
-                summary: any = {};
-                action: any = "quiet_hours_send";
+                summary: dict[str, any] = {};
+                action = "quiet_hours_send";
             } else {
                 logger.info("Checking pipeline state...");
                 summary = await state.get_state_summary();
                 action = await decide_next_action(brain, state, config, summary=summary);
             }
-            tasks: any = [];
-            has_open_convos: any = operator.gt(
-                summary.get("open_conversations", 0) + summary.get("auto_reply_handoffs", 0), 0
-            );
+            tasks = [];
+            has_open_convos = summary.get("open_conversations", 0)
+                + summary.get("auto_reply_handoffs", 0)
+                > 0;
 
             if action == "prospect" {
                 tasks.append(("prospect", scout.run()));
@@ -404,12 +294,9 @@ async def heartbeat(stop_event: asyncio.Event | None = None) -> any {
             } elif action == "idle" {
                 tasks.append(("analyze", analyst.run()));
             }
-            send_tasks: any = [];
-            if action == "send_campaign" {
-                send_tasks.append(("send_campaign", sender.run));
-            } elif sender.is_native {
-                send_tasks.append(("send_outbox", sender.run));
-            }
+            send_name = "send_campaign"
+                if action == "send_campaign"
+                else "send_outbox" if sender.is_native else "";
             if sender.is_native or has_open_convos {
                 tasks.append(("handle_replies", handler.run()));
             }
@@ -417,20 +304,20 @@ async def heartbeat(stop_event: asyncio.Event | None = None) -> any {
                 tasks.append(("profile", run_profile_stage(state, limit=25, config=config)));
             }
 
-            outcomes: any = await _run_agents(tasks);
-            if send_tasks {
-                unread: any = [
+            outcomes = await _run_agents(tasks);
+            if send_name {
+                unread = [
                     n
                     for (n, _) in tasks
                     if n in REPLY_READERS and outcomes.get(n) is not True
                 ];
-                paused: any = brain.paused_reason;
+                paused = brain.paused_reason;
                 if paused or unread {
-                    reason: any = paused or "replies couldn't all be read and handled.";
+                    reason = paused or "replies couldn't all be read and handled.";
                     logger.error(
                         f"Not sending this cycle: {reason} Queued emails wait until replies can be read again.",
                     );
-                    held: any = send_hold_reason(
+                    held = send_hold_reason(
                         unread, paused, getattr(handler, "last_read_problem", "")
                     );
                     if held is not None {
@@ -438,7 +325,7 @@ async def heartbeat(stop_event: asyncio.Event | None = None) -> any {
                     }
                 } else {
                     await record_send_phase(state, send_hold_reason([], "", ""));
-                    await _run_agents([(name, run()) for (name, run) in send_tasks]);
+                    await _run_agents([(send_name, sender.run())]);
                 }
             }
             try {
@@ -459,9 +346,7 @@ async def heartbeat(stop_event: asyncio.Event | None = None) -> any {
             break;
         } except Exception as e {
             consecutive_errors += 1;
-            backoff: any = min(
-                ERROR_BACKOFF_BASE * 2 ** (consecutive_errors - 1), ERROR_BACKOFF_CAP
-            );
+            backoff = min(ERROR_BACKOFF_BASE * 2 ** (consecutive_errors - 1), ERROR_BACKOFF_CAP);
             logger.error(f"Error in heartbeat (failure #{consecutive_errors}): {e}", exc_info=True);
             logger.info(f"Recovering... sleeping {backoff}s before retry.");
             if await _interruptible_sleep(backoff, stop_event) {
@@ -473,17 +358,15 @@ async def heartbeat(stop_event: asyncio.Event | None = None) -> any {
     logger.info("Sellbird shutting down. Deals don't close themselves, but I need a break.");
 }
 
-"""Check if Sellbird needs first-time setup."""
-def _needs_setup -> builtins.bool {
+def _needs_setup -> bool {
     import from sellbird.paths { PROJECT_ROOT }
     import from sellbird.config { _find_config_file, ConfigFileNotFoundError }
 
-    env_file: any = PROJECT_ROOT / ".env";
-    if not env_file.exists() {
+    if not (PROJECT_ROOT / ".env").exists() {
         return True;
     }
     try {
-        config_file: any = _find_config_file();
+        config_file = _find_config_file();
     } except ConfigFileNotFoundError {
         return True;
     }
@@ -491,28 +374,19 @@ def _needs_setup -> builtins.bool {
     try {
         import yaml;
         import from sellbird.textio { read_user_text }
-        config: any = yaml.safe_load(read_user_text(config_file));
-        if not isinstance(config, `dict) {
-            return True;
-        }
-        company: any = (config.get("persona") or {}).get("company", "");
-        if company in ("Your Company", "") {
-            return True;
-        }
+        config = yaml.safe_load(read_user_text(config_file));
+        return not isinstance(config, dict)
+            or (config.get("persona") or {}).get("company", "") in ("Your Company", "");
     } except Exception {
         return True;
     }
-
-    return False;
 }
 
-"""Run the heartbeat with SIGINT/SIGTERM wired to a graceful shutdown."""
-async def _run_with_signals -> any {
-    stop_event: any;
+async def _run_with_signals {
     stop_event = asyncio.Event();
-    loop: any = asyncio.get_running_loop();
+    loop = asyncio.get_running_loop();
 
-    def _request_shutdown(sig_name: builtins.str) -> any {
+    def _request_shutdown(sig_name: str) -> any {
         if stop_event.is_set() {
             logger.info("Second shutdown signal — exiting immediately.");
             sys.exit(1);
@@ -532,8 +406,7 @@ async def _run_with_signals -> any {
     await heartbeat(stop_event);
 }
 
-"""Entry point."""
-def main -> any {
+def main {
     if _needs_setup() {
         if not sys.stdin.isatty() {
             print("Sellbird isn't set up yet. Run `sellbird setup` in a terminal first.");
@@ -544,13 +417,12 @@ def main -> any {
         asyncio.run(run_setup());
         return;
     }
-    lock: any = hold_loop_lock(LOCK_FILE);
+    lock = hold_loop_lock(LOCK_FILE);
     if lock is None {
-        running: any = read_pid();
+        running = read_pid();
+        pid = f" (pid {running})" if running else "";
         print(
-            "Sellbird is already running"
-                + format(f" (pid {running})" if running else "", "")
-                + ". Stop it first, from the dashboard or with Ctrl+C in its terminal.",
+            f"Sellbird is already running{pid}. Stop it first, from the dashboard or with Ctrl+C in its terminal.",
         );
         sys.exit(1);
     }
