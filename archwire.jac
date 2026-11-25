@@ -194,7 +194,7 @@ graph import {
     sellbird.untrusted ++> sellbird.agents.scout { UNTRUSTED_RULE, fence }
     sellbird.integrations.tech_detect ++> sellbird.agents.scout { detect_tech }
     sellbird.collectors.ats ++> sellbird.agents.scout { role_keywords }
-    sellbird.paths --> sellbird.integrations.linkedin { PROJECT_ROOT }
+    sellbird.paths ++> sellbird.integrations.linkedin { PROJECT_ROOT }
     sellbird.brain ++> sellbird.agents.writer { Brain }
     sellbird.config ++> sellbird.agents.writer {
         EmailRulesError,
