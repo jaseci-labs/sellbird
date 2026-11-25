@@ -93,7 +93,7 @@ files = [
     "sellbird/brain.jac",
     "sellbird/claude_runtime.jac",
     "sellbird/cli.py",
-    "sellbird/codex.py",
+    "sellbird/codex.jac",
     "sellbird/collectors/__init__.jac",
     "sellbird/collectors/ats.jac",
     "sellbird/collectors/discover.jac",
