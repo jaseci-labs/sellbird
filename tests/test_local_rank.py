@@ -298,7 +298,7 @@ def _install(monkeypatch, handler):
     real = REAL_CLIENT
     monkeypatch.setattr(D.httpx, "AsyncClient", lambda **kw: real(
         transport=httpx.MockTransport(handler), **kw))
-    monkeypatch.setattr("sellbird.config.load_env", lambda: EnvConfig(
+    monkeypatch.setattr("sellbird.collectors.discover.load_env", lambda: EnvConfig(
         dataforseo_login="dummy", dataforseo_password="dummy"))
 
 

@@ -809,7 +809,7 @@ def test_the_default_provider_needs_no_account():
 @pytest.mark.asyncio
 async def test_unconfigured_provider_says_which_key_is_missing(state, config, monkeypatch):
     from sellbird.config import EnvConfig
-    monkeypatch.setattr("sellbird.config.load_env", lambda: EnvConfig())
+    monkeypatch.setattr("sellbird.collectors.discover.load_env", lambda: EnvConfig())
     report = await D.run_discovery(state, config, "dataforseo_listings",
                                    [D.DiscoveryQuery(term="roofer")])
     assert report.stopped == "not configured"
@@ -826,7 +826,7 @@ async def test_empty_api_key_runs_nothing_and_says_so(state, config,
                                                       register, monkeypatch):
     """The 2026-10-24 bug: an empty SERPER_API_KEY placeholder "succeeded"
     with 0 observations and exit code 0. It must stop with a named error."""
-    monkeypatch.setattr("sellbird.config.load_env",
+    monkeypatch.setattr("sellbird.collectors.discover.load_env",
                         lambda: EnvConfig(serper_api_key=""))
     fake = register(D.Serper())   # fresh instance — don't mutate the singleton
 
@@ -845,7 +845,7 @@ async def test_empty_api_key_runs_nothing_and_says_so(state, config,
 async def test_template_placeholder_key_is_treated_as_missing(state, config,
                                                               register,
                                                               monkeypatch):
-    monkeypatch.setattr("sellbird.config.load_env",
+    monkeypatch.setattr("sellbird.collectors.discover.load_env",
                         lambda: EnvConfig(serper_api_key="your_api_key_here"))
     fake = register(D.Serper())   # fresh instance — don't mutate the singleton
 
@@ -1271,7 +1271,7 @@ async def test_directory_title_still_filtered_after_adapter(provider, tmp_path, 
     real_client = httpx.AsyncClient
     monkeypatch.setattr(D.httpx, 'AsyncClient', lambda **kw: real_client(
         transport=httpx.MockTransport(lambda request: httpx.Response(200, json=payload)), **kw))
-    monkeypatch.setattr('sellbird.config.load_env', lambda: EnvConfig(
+    monkeypatch.setattr('sellbird.collectors.discover.load_env', lambda: EnvConfig(
         serper_api_key='dummy', dataforseo_login='dummy', dataforseo_password='dummy',
         scavio_api_key='dummy'))
     state = StateManager(str(tmp_path / 'test.db'))
@@ -1647,7 +1647,7 @@ async def test_scavio_stops_run_on_account_errors(state, config, register, monke
     real_client = httpx.AsyncClient
     monkeypatch.setattr(D.httpx, "AsyncClient", lambda **kw: real_client(
         transport=httpx.MockTransport(handler), **kw))
-    monkeypatch.setattr("sellbird.config.load_env", lambda: EnvConfig(scavio_api_key="fixture"))
+    monkeypatch.setattr("sellbird.collectors.discover.load_env", lambda: EnvConfig(scavio_api_key="fixture"))
     report = await D.run_discovery(state, config, provider.key,
         [D.DiscoveryQuery(term="roofer"), D.DiscoveryQuery(term="plumber")])
     assert len(calls) == 1
@@ -1672,7 +1672,7 @@ async def test_scavio_partial_search_preserves_prior_ranks_and_cost(state, confi
     real_client = httpx.AsyncClient
     monkeypatch.setattr(D.httpx, "AsyncClient", lambda **kw: real_client(
         transport=httpx.MockTransport(handler), **kw))
-    monkeypatch.setattr("sellbird.config.load_env", lambda: EnvConfig(scavio_api_key="fixture"))
+    monkeypatch.setattr("sellbird.collectors.discover.load_env", lambda: EnvConfig(scavio_api_key="fixture"))
     query = D.DiscoveryQuery(term="roofer", depth=20)
     await D.run_discovery(state, config, provider.key, [query])
     previous = await state.get_company_by_domain("roofer10.example")
