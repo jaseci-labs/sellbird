@@ -72,6 +72,16 @@ def _funding_fact(found: dict, today: date | None) -> str:
             "don't call it recent")
 
 
+async def _read(state, name: str, company_id: str):
+    lookup = getattr(state, name, None)
+    if lookup is None:
+        return None
+    try:
+        return await lookup(company_id)
+    except Exception:
+        return None
+
+
 async def startup_facts(state, company_id: str, today: date | None = None) -> list[str] | None:
     """Fact lines for the writer's prompt when the company is a startup
     (YC, another accelerator, or a raise it announced in the last 18
@@ -80,16 +90,7 @@ async def startup_facts(state, company_id: str, today: date | None = None) -> li
     if not company_id or state is None:
         return None
     facts: list[str] = []
-
-    async def read(name):
-        lookup = getattr(state, name, None)
-        if lookup is None:
-            return None
-        try:
-            return await lookup(company_id)
-        except Exception:
-            return None
-
+    read = lambda name: _read(state, name, company_id)  # noqa: E731
     yc = await read("yc_batch")
     if yc is not None:
         facts.append("- Backed by Y Combinator" + (f" (YC {yc})" if yc else "") + ", as their own site says")

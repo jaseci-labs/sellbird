@@ -70,7 +70,7 @@ STRIPPED_ENV = (
 
 HELP_TIMEOUT_SECONDS = 30
 
-_capable: dict[tuple, bool] = {}
+_capable: dict[tuple[str, int | None, int | None], bool] = {}
 _capable_lock = threading.Lock()
 
 
@@ -199,7 +199,7 @@ def isolated_cwd():
         yield str(Path(tmp).resolve())
 
 
-def _fingerprint(executable: str) -> tuple:
+def _fingerprint(executable: str) -> tuple[str, int | None, int | None]:
     real = os.path.realpath(executable)
     try:
         st = os.stat(real)

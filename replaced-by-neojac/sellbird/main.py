@@ -1,6 +1,7 @@
 """Sellbird's main heartbeat loop."""
 
 import asyncio
+from typing import Any
 import logging
 import signal
 import sys
@@ -181,7 +182,8 @@ async def decide_next_action(
     # held Instantly drafts, any draft with the email channel off (the
     # list-building setup), and native drafts while the kill switch is set
     # (the Sender stages nothing until sending resumes).
-    email = getattr(getattr(config, "channels", None), "email", None)
+    loose: Any = config  # a test double may lack any part of it
+    email = getattr(getattr(loose, "channels", None), "email", None)
     native_paused = (summary.get("sending_paused")
                      and getattr(email, "provider", "") != "instantly")
     held = (legacy_sending_held(config) or native_paused

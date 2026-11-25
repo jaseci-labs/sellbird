@@ -13,6 +13,7 @@ Sellbird helps design it instead of picking it alone:
 """
 
 import copy
+from typing import Any
 import logging
 from pathlib import Path
 
@@ -146,7 +147,8 @@ def save_offer(config_file: Path, entry: str, ideas: list[str] | None = None) ->
     config file. Keeps a .bak of the file as it was."""
     entry = " ".join(str(entry or "").split())[:MAX_OFFER_CHARS]
     raw = read_user_text(config_file)
-    data = yaml.safe_load(raw) or {}
+    data: dict[str, Any] = {}
+    data = yaml.safe_load(raw) or data
     product = data.setdefault("product", {})
     offer = product.setdefault("offer", {})
     if not isinstance(offer, dict):
@@ -231,7 +233,8 @@ def save_company(config_file: Path, section: str, fields: dict) -> dict:
         if section == "product" and key in cleaned and not cleaned[key]:
             raise ValueError(f"the product {key} can't be empty")
     raw = read_user_text(config_file)
-    data = yaml.safe_load(raw) or {}
+    data: dict[str, Any] = {}
+    data = yaml.safe_load(raw) or data
     if section == "offer":
         target = data.setdefault("product", {}).setdefault("offer", {})
     else:

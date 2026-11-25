@@ -166,40 +166,6 @@ graph import {
     sellbird.paths --> sellbird.trainer { PROJECT_ROOT }
     sellbird.textio --> sellbird.trainer { read_user_text, utf8_stdio }
     sellbird.untrusted --> sellbird.trainer { UNTRUSTED_RULE, fence }
-    sellbird.brain --> sellbird.main { Brain }
-    sellbird.extensions --> sellbird.main { run_tick_steps }
-    sellbird.sending_mode --> sellbird.main { sync_sending_mode }
-    sellbird.config --> sellbird.main {
-        ConfigError,
-        ConfigFileNotFoundError,
-        SellbirdConfig,
-        _find_config_file,
-        compliance_notice,
-        legacy_sending_held,
-        load_config,
-        load_env,
-        send_window_of,
-        sending_notice,
-    }
-    sellbird.integrations.mail_provider --> sellbird.main { NATIVE_PROVIDERS }
-    sellbird.pidfile --> sellbird.main {
-        LOCK_FILE,
-        hold_loop_lock,
-        read_pid,
-        release_loop_lock,
-        remove_pid_file,
-        write_pid_file,
-    }
-    sellbird.pipeline --> sellbird.main { run_profile_stage }
-    sellbird.state --> sellbird.main { StateManager }
-    sellbird.agents.scout --> sellbird.main { Scout }
-    sellbird.agents.writer --> sellbird.main { Writer }
-    sellbird.agents.sender --> sellbird.main { Sender }
-    sellbird.agents.handler --> sellbird.main { Handler }
-    sellbird.agents.analyst --> sellbird.main { Analyst }
-    sellbird.paths --> sellbird.main { PROJECT_ROOT }
-    sellbird.textio --> sellbird.main { read_user_text, utf8_stdio }
-    sellbird.setup --> sellbird.main { run_setup }
     sellbird.config --> sellbird.mailboxes { WarmupConfig, cold_daily_cap }
     sellbird.integrations.mail_provider --> sellbird.mailboxes {
         MailIdentity,
@@ -472,9 +438,6 @@ graph import {
     sellbird.extensions --> sellbird.dashboard;
     sellbird.dashboard_instance --> sellbird.dashboard;
     sellbird.extensions --> sellbird.agent_policy;
-    sellbird.textio --> sellbird.offer { read_user_text }
-    sellbird.untrusted --> sellbird.offer { UNTRUSTED_RULE, fence }
-    sellbird.agents.writer --> sellbird.offer { Writer, _names }
     sellbird.config --> sellbird.register { ComplianceConfig, live_do_not_contact }
     sellbird.fit --> sellbird.register { company_fit, current_roles }
     sellbird.gate --> sellbird.register { do_not_contact_match }
@@ -1631,6 +1594,43 @@ graph import {
     include sellbird.models.company ++> sellbird.models { Company }
     include sellbird.models.conversation ++> sellbird.models { Conversation, Message, STAGES }
     include sellbird.models.prospect ++> sellbird.models { Prospect }
+    sellbird.brain ++> sellbird.main { Brain }
+    sellbird.extensions ++> sellbird.main { run_tick_steps }
+    sellbird.sending_mode ++> sellbird.main { sync_sending_mode }
+    sellbird.config ++> sellbird.main {
+        ConfigError,
+        load_config,
+        load_env,
+        SellbirdConfig,
+        legacy_sending_held,
+        sending_notice,
+        compliance_notice,
+        send_window_of,
+        _find_config_file,
+        ConfigFileNotFoundError,
+    }
+    sellbird.integrations.mail_provider ++> sellbird.main { NATIVE_PROVIDERS }
+    sellbird.pidfile ++> sellbird.main {
+        LOCK_FILE,
+        hold_loop_lock,
+        read_pid,
+        release_loop_lock,
+        remove_pid_file,
+        write_pid_file,
+    }
+    sellbird.pipeline ++> sellbird.main { run_profile_stage }
+    sellbird.state ++> sellbird.main { StateManager }
+    sellbird.agents.scout ++> sellbird.main { Scout }
+    sellbird.agents.writer ++> sellbird.main { Writer }
+    sellbird.agents.sender ++> sellbird.main { Sender }
+    sellbird.agents.handler ++> sellbird.main { Handler }
+    sellbird.agents.analyst ++> sellbird.main { Analyst }
+    sellbird.paths ++> sellbird.main { PROJECT_ROOT }
+    sellbird.textio ++> sellbird.main { read_user_text, utf8_stdio }
+    sellbird.setup ++> sellbird.main { run_setup }
+    sellbird.textio ++> sellbird.offer { read_user_text }
+    sellbird.untrusted ++> sellbird.offer { UNTRUSTED_RULE, fence }
+    sellbird.agents.writer ++> sellbird.offer { Writer, _names }
 }
 
 graph spaces {

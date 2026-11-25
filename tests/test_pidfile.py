@@ -193,7 +193,7 @@ def test_stop_never_signals_a_reused_pid(status_client, monkeypatch, tmp_path):
 def test_sellbird_run_refuses_when_a_loop_is_already_running(monkeypatch, tmp_path, capsys):
     import sellbird.main as main_mod
     lock = tmp_path / "sellbird.lock"
-    monkeypatch.setattr(main_mod, "LOCK_FILE", lock)
+    monkeypatch.setattr(pidfile, "LOCK_FILE", lock)
     monkeypatch.setattr(main_mod, "_needs_setup", lambda: False)
     ran = []
     monkeypatch.setattr(main_mod, "_run_with_signals", lambda: ran.append(1))
