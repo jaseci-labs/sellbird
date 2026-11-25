@@ -28,6 +28,29 @@ def _public_address(value: str) -> str {
     return str(address);
 }
 
+async def _addresses(req: any, host: str, port: int, budget: float) -> list[str] {
+    try {
+        try {
+            ipaddress.ip_address(host);
+            found = [host];
+        } except ValueError {
+            rows = asyncio.get_running_loop().getaddrinfo(host, port, type=socket.SOCK_STREAM);
+            found = [row[4][0] for row in await asyncio.wait_for(rows, timeout=budget)];
+        }
+        addresses = list(dict.fromkeys(_public_address(a) for a in found));
+        if not addresses {
+            raise ValueError("DNS returned no addresses");
+        }
+    } except ValueError as exc {
+        raise UnsafeURLError("Website resolves to a non-public destination", request=req) from exc;
+    } except asyncio.TimeoutError as exc {
+        raise httpx.ConnectTimeout("Website DNS resolution timed out", request=req) from exc;
+    } except OSError as exc {
+        raise httpx.ConnectError("Website DNS resolution failed", request=req) from exc;
+    }
+    return sorted(addresses, key=lambda (a: str) -> bool { return ":" in a; });
+}
+
 class PublicHTTPTransport(httpx.AsyncBaseTransport) {
     has _transport: any = None;
 
@@ -51,39 +74,7 @@ class PublicHTTPTransport(httpx.AsyncBaseTransport) {
         timeout = request.extensions.get("timeout", {}).get("connect");
         connect_budget = timeout if timeout is not None else 10.0;
         deadline = monotonic() + connect_budget;
-        try {
-            literal = ipaddress.ip_address(host);
-        } except ValueError {
-            literal = None;
-        }
-        try {
-            if literal is not None {
-                found = [host];
-            } else {
-                lookup = asyncio.get_running_loop().getaddrinfo(
-                    host, port, type=socket.SOCK_STREAM
-                );
-                found = [
-                    row[4][0]
-                    for row in await asyncio.wait_for(lookup, timeout=connect_budget)
-                ];
-            }
-            addresses = list(dict.fromkeys(_public_address(a) for a in found));
-            if not addresses {
-                raise ValueError("DNS returned no addresses");
-            }
-            addresses.sort(key=lambda (a: str) -> bool { return ":" in a; });
-        } except ValueError as exc {
-            raise UnsafeURLError(
-                "Website resolves to a non-public destination", request=request
-            ) from exc;
-        } except asyncio.TimeoutError as exc {
-            raise httpx.ConnectTimeout(
-                "Website DNS resolution timed out", request=request
-            ) from exc;
-        } except OSError as exc {
-            raise httpx.ConnectError("Website DNS resolution failed", request=request) from exc;
-        }
+        addresses = await _addresses(request, host, port, connect_budget);
         headers = request.headers.copy();
         headers["Host"] = url.netloc.decode("ascii");
         for (index, address) in enumerate(addresses) {
@@ -116,12 +107,8 @@ class PublicHTTPTransport(httpx.AsyncBaseTransport) {
 }
 
 def public_http_client(*, timeout: any = 15.0, headers: dict[str, str] | None = None) -> any {
+    opts = {"trust_env": False, "follow_redirects": True, "max_redirects": 10};
     return httpx.AsyncClient(
-        transport=PublicHTTPTransport(),
-        trust_env=False,
-        timeout=timeout,
-        headers=headers,
-        follow_redirects=True,
-        max_redirects=10,
+        transport=PublicHTTPTransport(), timeout=timeout, headers=headers, **opts
     );
 }
