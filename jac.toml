@@ -124,7 +124,7 @@ files = [
     "sellbird/integrations/instantly.jac",
     "sellbird/integrations/linkedin.py",
     "sellbird/integrations/mail_provider.jac",
-    "sellbird/integrations/microsoft.py",
+    "sellbird/integrations/microsoft.jac",
     "sellbird/integrations/precleared.py",
     "sellbird/integrations/quota.jac",
     "sellbird/integrations/signature.jac",

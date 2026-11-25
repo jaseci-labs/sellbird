@@ -143,9 +143,9 @@ graph import {
         load_signature,
     }
     sellbird.integrations.signature ++> sellbird.integrations.mail_provider { set_body }
-    sellbird.paths --> sellbird.integrations.microsoft { PROJECT_ROOT }
-    sellbird.workspace_home --> sellbird.integrations.microsoft { current_home }
-    sellbird.integrations.mail_provider --> sellbird.integrations.microsoft {
+    sellbird.paths ++> sellbird.integrations.microsoft { PROJECT_ROOT }
+    sellbird.workspace_home ++> sellbird.integrations.microsoft { current_home }
+    sellbird.integrations.mail_provider ++> sellbird.integrations.microsoft {
         InboundMessage,
         MailIdentity,
         MailProvider,
@@ -153,10 +153,14 @@ graph import {
         TokenSource,
         identity_from_config,
         looks_like_bounce,
+        loopback_code,
         missing_token_text,
+        read_token_file,
         save_if_signed_in_as,
+        token_urlsafe,
+        write_token_file,
     }
-    sellbird.integrations.signature --> sellbird.integrations.microsoft {
+    sellbird.integrations.signature ++> sellbird.integrations.microsoft {
         SignatureError,
         load_signature,
         render_html,
