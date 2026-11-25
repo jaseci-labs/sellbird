@@ -1,364 +1,120 @@
-"""Send windows in the recipient's own time zone.
-
-With ``channels.email.send_window`` set, a cold email goes out only inside
-that window (08:00 to 17:00 on weekdays by default) in the recipient's local
-time, so a campaign that reaches New York and Oslo lands in office hours in
-both. Replies are never held by the window; in quiet hours they wait for
-the operator's own hours, as before. ``weekdays_only`` means Monday to
-Friday everywhere.
-
-The recipient's zone comes from what Sellbird already knows, in this order:
-
-1. the company's location: a US state ("Austin, TX", "Brooklyn, New York"),
-   a Canadian province or Australian state ("Toronto, ON, Canada",
-   "Sydney NSW 2000"), or a country with a single time zone ("Oslo, Norway");
-2. the coordinates discovery cached when it geocoded that location (the
-   ``geo:<place>`` settings), for a country with several zones or a place
-   given without its country;
-3. the recipient's country as Precleared worked it out from the address,
-   company records or the company's website, when the optional compliance
-   check is on;
-4. ``compliance.precleared.prospect_country``.
-
-A country with several zones and nothing more specific gets its main zone
-(MAIN_ZONE: Sydney for Australia, Moscow for Russia), except the US, which
-has none. A main zone is used but not stored, so coordinates or a country
-found later can still correct it. An empty location stays unresolved. Those recipients get the window in
-``usage.quiet_hours.timezone``, which is what Sellbird did before. A resolved
-zone is stored on the prospect, so it is worked out once (unless a country
-found later could still change it; see ``recipient_zone``).
-
-A code that is a state or province and a country too ("Berlin, DE",
-"Mumbai, IN", "St. John's, NL", "Adelaide, SA") is settled by Precleared's
-country, the cached coordinates or ``prospect_country``. With none of
-those, a US state code reads as the state and any other as the country, and
-that guess isn't stored. Writing the country out ("Berlin, Germany") always
-works.
-
-The same reading gives Precleared the recipient's country, when the check
-is on (``recipient_country``). Only a country Sellbird is sure of goes: one
-named in the location, the country of a state or province named there, a
-code that is a region and a country too once nearby cached coordinates settle
-it. A stored time zone alone has no country provenance and does not count.
-A code read by convention alone, a state reading the coordinates
-contradict, and coordinates by themselves (the nearest reference city can
-be over a border) send nothing, because Precleared takes the country it is
-given as settled, and a wrong one is worse than none. Without one,
-``prospect_country`` or the one country every ``icp.geography`` entry is in
-goes as a default Precleared uses only when its own lookups show nothing
-(``icp_country``).
-"""
-
-import builtins;
-
-import operator;
-
 import math;
-
 import random;
-
 import re;
-
 import unicodedata;
-
 import from datetime { datetime, timedelta, time }
-
 import from functools { lru_cache }
-
 import pytz;
 
-glob START_SPREAD: any = timedelta(minutes=30);
+glob START_SPREAD = timedelta(minutes=30),
+     MAX_NEAREST_KM = 500,
+     MAX_REGION_KM = 3000,
+     US_STATES = _regions(
+         "AL:alabama:America/Chicago,AK:alaska:America/Anchorage,AZ:arizona:America/Phoenix,"
+             "AR:arkansas:America/Chicago,CA:california:America/Los_Angeles,CO:colorado:America/Denver,"
+             "CT:connecticut:America/New_York,DE:delaware:America/New_York,"
+             "DC:district of columbia:America/New_York,FL:florida:America/New_York,"
+             "GA:georgia:America/New_York,HI:hawaii:Pacific/Honolulu,ID:idaho:America/Boise,"
+             "IL:illinois:America/Chicago,IN:indiana:America/Indiana/Indianapolis,IA:iowa:America/Chicago,"
+             "KS:kansas:America/Chicago,KY:kentucky:America/New_York,LA:louisiana:America/Chicago,"
+             "ME:maine:America/New_York,MD:maryland:America/New_York,MA:massachusetts:America/New_York,"
+             "MI:michigan:America/Detroit,MN:minnesota:America/Chicago,MS:mississippi:America/Chicago,"
+             "MO:missouri:America/Chicago,MT:montana:America/Denver,NE:nebraska:America/Chicago,"
+             "NV:nevada:America/Los_Angeles,NH:new hampshire:America/New_York,NJ:new jersey:America/New_York,"
+             "NM:new mexico:America/Denver,NY:new york:America/New_York,NC:north carolina:America/New_York,"
+             "ND:north dakota:America/Chicago,OH:ohio:America/New_York,OK:oklahoma:America/Chicago,"
+             "OR:oregon:America/Los_Angeles,PA:pennsylvania:America/New_York,RI:rhode island:America/New_York,"
+             "SC:south carolina:America/New_York,SD:south dakota:America/Chicago,TN:tennessee:America/Chicago,"
+             "TX:texas:America/Chicago,UT:utah:America/Denver,VT:vermont:America/New_York,"
+             "VA:virginia:America/New_York,WA:washington:America/Los_Angeles,"
+             "WV:west virginia:America/New_York,WI:wisconsin:America/Chicago,WY:wyoming:America/Denver",
+     ),
+     CA_PROVINCES = _regions(
+         "AB:alberta:America/Edmonton,BC:british columbia:America/Vancouver,MB:manitoba:America/Winnipeg,"
+             "NB:new brunswick:America/Moncton,NL:newfoundland and labrador:America/St_Johns,"
+             "NS:nova scotia:America/Halifax,NT:northwest territories:America/Edmonton,"
+             "NU:nunavut:America/Iqaluit,ON:ontario:America/Toronto,PE:prince edward island:America/Halifax,"
+             "QC:quebec:America/Toronto,SK:saskatchewan:America/Regina,YT:yukon:America/Whitehorse",
+     ),
+     AU_STATES = _regions(
+         "NSW:new south wales:Australia/Sydney,VIC:victoria:Australia/Melbourne,"
+             "QLD:queensland:Australia/Brisbane,WA:western australia:Australia/Perth,"
+             "SA:south australia:Australia/Adelaide,TAS:tasmania:Australia/Hobart,"
+             "ACT:australian capital territory:Australia/Sydney,NT:northern territory:Australia/Darwin",
+     ),
+     MAIN_ZONE = _pairs(
+         "CL:America/Santiago,CN:Asia/Shanghai,EC:America/Guayaquil,ES:Europe/Madrid,NZ:Pacific/Auckland,"
+             "PT:Europe/Lisbon,UA:Europe/Kyiv,AU:Australia/Sydney,BR:America/Sao_Paulo,CA:America/Toronto,"
+             "ID:Asia/Jakarta,MX:America/Mexico_City,RU:Europe/Moscow",
+     ),
+     COUNTRY_ALIASES = _pairs(
+         "uk:GB,united kingdom:GB,great britain:GB,britain:GB,england:GB,scotland:GB,wales:GB,"
+             "northern ireland:GB,usa:US,us:US,united states of america:US,america:US,the netherlands:NL,"
+             "holland:NL,deutschland:DE,south korea:KR,korea:KR,uae:AE,czechia:CZ,republic of ireland:IE,"
+             "eire:IE",
+     ),
+     REGION_ALIASES = _pairs("newfoundland:NL,labrador:NL,pei:PE,yukon territory:YT"),
+     CA_CODES_ALONE = set("AB BC MB NB NS ON QC".split()),
+     AU_CODES_ALONE = set("NSW VIC QLD TAS ACT".split()),
+     REGION_COUNTRY = dict.fromkeys(US_STATES, "US")
+         | dict.fromkeys(CA_PROVINCES, "CA")
+         | dict.fromkeys(AU_STATES, "AU");
 
-glob MAX_NEAREST_KM: any = 500;
+def _regions(text: str) -> dict[str, tuple[str, str]];
 
-glob MAX_REGION_KM: any = 3000;
+def _pairs(text: str) -> dict[str, str];
 
-glob US_STATES: any = {
-    "AL": ("alabama", "America/Chicago"),
-    "AK": ("alaska", "America/Anchorage"),
-    "AZ": ("arizona", "America/Phoenix"),
-    "AR": ("arkansas", "America/Chicago"),
-    "CA": ("california", "America/Los_Angeles"),
-    "CO": ("colorado", "America/Denver"),
-    "CT": ("connecticut", "America/New_York"),
-    "DE": ("delaware", "America/New_York"),
-    "DC": ("district of columbia", "America/New_York"),
-    "FL": ("florida", "America/New_York"),
-    "GA": ("georgia", "America/New_York"),
-    "HI": ("hawaii", "Pacific/Honolulu"),
-    "ID": ("idaho", "America/Boise"),
-    "IL": ("illinois", "America/Chicago"),
-    "IN": ("indiana", "America/Indiana/Indianapolis"),
-    "IA": ("iowa", "America/Chicago"),
-    "KS": ("kansas", "America/Chicago"),
-    "KY": ("kentucky", "America/New_York"),
-    "LA": ("louisiana", "America/Chicago"),
-    "ME": ("maine", "America/New_York"),
-    "MD": ("maryland", "America/New_York"),
-    "MA": ("massachusetts", "America/New_York"),
-    "MI": ("michigan", "America/Detroit"),
-    "MN": ("minnesota", "America/Chicago"),
-    "MS": ("mississippi", "America/Chicago"),
-    "MO": ("missouri", "America/Chicago"),
-    "MT": ("montana", "America/Denver"),
-    "NE": ("nebraska", "America/Chicago"),
-    "NV": ("nevada", "America/Los_Angeles"),
-    "NH": ("new hampshire", "America/New_York"),
-    "NJ": ("new jersey", "America/New_York"),
-    "NM": ("new mexico", "America/Denver"),
-    "NY": ("new york", "America/New_York"),
-    "NC": ("north carolina", "America/New_York"),
-    "ND": ("north dakota", "America/Chicago"),
-    "OH": ("ohio", "America/New_York"),
-    "OK": ("oklahoma", "America/Chicago"),
-    "OR": ("oregon", "America/Los_Angeles"),
-    "PA": ("pennsylvania", "America/New_York"),
-    "RI": ("rhode island", "America/New_York"),
-    "SC": ("south carolina", "America/New_York"),
-    "SD": ("south dakota", "America/Chicago"),
-    "TN": ("tennessee", "America/Chicago"),
-    "TX": ("texas", "America/Chicago"),
-    "UT": ("utah", "America/Denver"),
-    "VT": ("vermont", "America/New_York"),
-    "VA": ("virginia", "America/New_York"),
-    "WA": ("washington", "America/Los_Angeles"),
-    "WV": ("west virginia", "America/New_York"),
-    "WI": ("wisconsin", "America/Chicago"),
-    "WY": ("wyoming", "America/Denver"),
-};
-
-glob CA_PROVINCES: any = {
-    "AB": ("alberta", "America/Edmonton"),
-    "BC": ("british columbia", "America/Vancouver"),
-    "MB": ("manitoba", "America/Winnipeg"),
-    "NB": ("new brunswick", "America/Moncton"),
-    "NL": ("newfoundland and labrador", "America/St_Johns"),
-    "NS": ("nova scotia", "America/Halifax"),
-    "NT": ("northwest territories", "America/Edmonton"),
-    "NU": ("nunavut", "America/Iqaluit"),
-    "ON": ("ontario", "America/Toronto"),
-    "PE": ("prince edward island", "America/Halifax"),
-    "QC": ("quebec", "America/Toronto"),
-    "SK": ("saskatchewan", "America/Regina"),
-    "YT": ("yukon", "America/Whitehorse"),
-};
-
-glob AU_STATES: any = {
-    "NSW": ("new south wales", "Australia/Sydney"),
-    "VIC": ("victoria", "Australia/Melbourne"),
-    "QLD": ("queensland", "Australia/Brisbane"),
-    "WA": ("western australia", "Australia/Perth"),
-    "SA": ("south australia", "Australia/Adelaide"),
-    "TAS": ("tasmania", "Australia/Hobart"),
-    "ACT": ("australian capital territory", "Australia/Sydney"),
-    "NT": ("northern territory", "Australia/Darwin"),
-};
-
-glob CA_CODES_ALONE: any = {"AB", "BC", "MB", "NB", "NS", "ON", "QC"};
-
-glob AU_CODES_ALONE: any = {"NSW", "VIC", "QLD", "TAS", "ACT"};
-
-glob MAIN_ZONE: any = {
-    "CL": "America/Santiago",
-    "CN": "Asia/Shanghai",
-    "EC": "America/Guayaquil",
-    "ES": "Europe/Madrid",
-    "NZ": "Pacific/Auckland",
-    "PT": "Europe/Lisbon",
-    "UA": "Europe/Kyiv",
-    "AU": "Australia/Sydney",
-    "BR": "America/Sao_Paulo",
-    "CA": "America/Toronto",
-    "ID": "Asia/Jakarta",
-    "MX": "America/Mexico_City",
-    "RU": "Europe/Moscow",
-};
-
-glob COUNTRY_ALIASES: any = {
-    "uk": "GB",
-    "united kingdom": "GB",
-    "great britain": "GB",
-    "britain": "GB",
-    "england": "GB",
-    "scotland": "GB",
-    "wales": "GB",
-    "northern ireland": "GB",
-    "usa": "US",
-    "us": "US",
-    "united states of america": "US",
-    "america": "US",
-    "the netherlands": "NL",
-    "holland": "NL",
-    "deutschland": "DE",
-    "south korea": "KR",
-    "korea": "KR",
-    "uae": "AE",
-    "czechia": "CZ",
-    "republic of ireland": "IE",
-    "eire": "IE",
-};
-
-glob REGION_ALIASES: any = {
-    "newfoundland": "NL",
-    "labrador": "NL",
-    "pei": "PE",
-    "yukon territory": "YT",
-};
-
-glob REGION_COUNTRY: any = {
-    **{code: "US" for code in US_STATES},
-    **{code: "CA" for code in CA_PROVINCES},
-    **{code: "AU" for code in AU_STATES},
-};
-
-"""Lowercase, no accents or dots, single spaces: "Québec" -> "quebec"."""
-def _clean(text: builtins.str) -> builtins.str;
+def _clean(text: str) -> str;
 
 @lru_cache(maxsize=1)
-def _country_names -> builtins.dict[builtins.str, builtins.str];
+def _country_names -> dict[str, any];
 
-"""Each zone's reference city, from the tz database's zone.tab."""
 @lru_cache(maxsize=1)
-def _zone_points -> builtins.dict[builtins.str, builtins.tuple[builtins.float, builtins.float]];
+def _zone_points -> dict[str, tuple[float, float]];
 
-""""+5955+01045" or "+404251-0740023" -> (lat, lon) in degrees."""
-def _iso6709(text: builtins.str) -> builtins.tuple[builtins.float, builtins.float] | None;
+def _iso6709(text: str) -> tuple[float, float] | None;
 
-"""Great-circle distance in km."""
-def _km(
-    a: builtins.tuple[builtins.float, builtins.float],
-    b: builtins.tuple[builtins.float, builtins.float],
-) -> builtins.float;
+def _km(a: tuple[float, float], b: tuple[float, float]) -> float;
 
-"""The zone whose reference city is closest to ``point``, or ""."""
-def _nearest(point, zones=None, max_km: builtins.float | None = None) -> builtins.str;
+def _nearest(point: any, zones: any = None, max_km: float | None = None) -> str;
 
-"""The "lat,lon" (optionally ",radius") discovery caches, or None."""
-def _point(text: builtins.str) -> builtins.tuple[builtins.float, builtins.float] | None;
+def _point(text: str) -> tuple[float, float] | None;
+def country_code(value: any) -> str;
 
-"""A two-letter country code the tz database knows ("uk" -> "GB"), or ""."""
-def country_code(value) -> builtins.str;
-
-"""Each zone's country, from the tz database: no zone is listed under two."""
 @lru_cache(maxsize=1)
-def _zone_countries -> builtins.dict[builtins.str, builtins.str];
+def _zone_countries -> dict[str, str];
+def zone_country(zone: str) -> str;
 
-"""The country a zone belongs to ("Europe/London" -> "GB"), or ""."""
-def zone_country(zone: builtins.str) -> builtins.str;
+def _one_offset(zones: list[str]) -> bool;
 
-"""True when every zone keeps the same clock all year (Berlin and
-    Busingen), so the country effectively has one zone."""
-def _one_offset(zones: builtins.list[builtins.str]) -> builtins.bool;
+def _country_zone(code: str, point: any = None) -> str;
 
-def _country_zone(code: builtins.str, point=None) -> builtins.str;
+def _parts(location: str) -> list[str];
 
-"""True when _country_zone can only give MAIN_ZONE's answer."""
-def _main_zone_only(code: builtins.str, point=None) -> builtins.bool;
+def _codes(part: str) -> list[str];
 
-"""Comma-separated parts, last first, with postcodes dropped."""
-def _parts(location: builtins.str) -> builtins.list[builtins.str];
+def _country_in(parts: list[str]) -> str;
 
-"""Upper-case words in a part, dots dropped: "D.C." -> "DC"."""
-def _codes(part: builtins.str) -> builtins.list[builtins.str];
+def _ambiguous_code(parts: list[str]) -> str;
 
-"""A country the location names without doubt, or ""."""
-def _country_in(parts: builtins.list[builtins.str]) -> builtins.str;
+def _ref_km(point: any, zone: str) -> float;
 
-"""The first code in the location that is a state or province and a
-    country too ("Berlin, DE", "St. John's, NL"), or ""."""
-def _ambiguous_code(parts: builtins.list[builtins.str]) -> builtins.str;
+def _region(parts: list[str], text_country: str, hint: str) -> str;
+def zone_for(location: str = "", country: str = "", point: str = "") -> str;
 
-def _ref_km(point, zone: builtins.str) -> builtins.float;
+def _country(parts: list[str], coords: any = None, hint: str = "") -> tuple[str, bool];
+def country_for(location: str = "", point: str = "") -> tuple[str, bool];
 
-"""The zone of a US state, Canadian province or Australian state named
-    in the location, or "".
+def _resolve(location: str = "", country: str = "", point: str = "") -> tuple[str, bool];
 
-    ``text_country`` is a country written in the location itself, ``hint``
-    one known from elsewhere. A two-letter code that is both a US state and
-    a country ("DE", "IN") is read as the state, unless the hint says it's
-    that country.
-    """
-def _region(
-    parts: builtins.list[builtins.str], text_country: builtins.str, hint: builtins.str
-) -> builtins.str;
+def _localize(tz: any, naive: datetime) -> datetime;
 
-"""The IANA time zone for a recipient, or "" when it can't be told.
+def _bounds(tz: any, day: any, window: any) -> tuple[datetime, datetime];
+def in_window(at: datetime, zone: str, window: any) -> bool;
+def next_send_time(after: datetime, zone: str, window: any, rng: any = None) -> datetime;
 
-    ``location`` is free text such as a company's address or "Denver, CO";
-    ``country`` a two-letter code known from elsewhere (Precleared's answer
-    or the configured prospect country); ``point`` the "lat,lon" discovery
-    cached for the location. A state or country written in the location
-    wins over ``country``.
-    """
-def zone_for(
-    location: builtins.str = "", country: builtins.str = "", point: builtins.str = ""
-) -> builtins.str;
+def icp_country(config: any) -> str;
 
-"""The country the location's text puts the place in, or "", plus
-    whether that was a guess: a code that is a region and a country, read
-    by the US-first convention because nothing else said which."""
-def _country(
-    parts: builtins.list[builtins.str], coords=None, hint: builtins.str = ""
-) -> builtins.tuple[builtins.str, builtins.bool];
-
-"""The country a location puts a recipient in, and whether it is certain.
-
-    Certain: a country named in the text, a US state, Canadian province or
-    Australian state (by name or an unambiguous code), or a code that is a
-    region and a country too settled by the cached coordinates. Not
-    certain: that code read by convention alone (the reading comes back,
-    marked so), a state reading the coordinates contradict, and the
-    coordinates by themselves, which can put a place over a border. ""
-    when nothing names one.
-    """
-def country_for(
-    location: builtins.str = "", point: builtins.str = ""
-) -> builtins.tuple[builtins.str, builtins.bool];
-
-"""zone_for, plus whether the answer was a guess: a code that is a
-    region and a country, read by the US-first convention because nothing
-    else said which."""
-def _resolve(
-    location: builtins.str = "", country: builtins.str = "", point: builtins.str = ""
-) -> builtins.tuple[builtins.str, builtins.bool];
-
-def _clock(value: builtins.str) -> time;
-
-"""A local wall-clock time as an aware datetime, through DST changes:
-    a time skipped in spring becomes the moment after the gap, and a time
-    that happens twice in autumn is the first of the two."""
-def _localize(tz, naive: datetime) -> datetime;
-
-def _bounds(tz, day, window) -> builtins.tuple[datetime, datetime];
-
-"""Whether ``at`` (naive UTC) falls inside the window in ``zone``."""
-def in_window(at: datetime, zone: builtins.str, window) -> builtins.bool;
-
-"""The first moment at or after ``after`` (naive UTC) inside the window
-    in ``zone``, as naive UTC. Inside the window already: ``after`` itself.
-    Otherwise the next opening, plus up to START_SPREAD so a batch moved to
-    the same morning doesn't all go at once."""
-def next_send_time(after: datetime, zone: builtins.str, window, rng=None) -> datetime;
-
-def _prospect_country(config) -> builtins.str;
-
-"""The one country every ``icp.geography`` entry is certainly in, or "".
-
-    Precleared's default when ``prospect_country`` is unset: the ICP is
-    where discovery looked. A default only, so Precleared's own finding
-    still wins."""
-def icp_country(config) -> builtins.str;
-
-"""The company's location and the "lat,lon" discovery cached for it."""
-async def _place(state, prospect) -> builtins.tuple[builtins.str, builtins.str];
-
-"""The recipient's country when Sellbird is sure of it, for Precleared's
-    ``recipient_country``; "" otherwise, since a guess sent as fact would
-    override Precleared's own evidence. See ``country_for``."""
-async def recipient_country(state, prospect) -> builtins.str;
-
-"""This recipient's zone, worked out once and stored on the prospect.
-
-    ``country`` is the recipient's country from Precleared, when a check
-    returned one. Returns "" when nothing settles it."""
-async def recipient_zone(state, prospect, config, country: builtins.str = "") -> builtins.str;
+async def _place(state: any, prospect: any) -> tuple[str, str];
+async def recipient_country(state: any, prospect: any) -> str;
+async def recipient_zone(state: any, prospect: any, config: any, country: str = "") -> str;
