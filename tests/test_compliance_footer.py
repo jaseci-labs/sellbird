@@ -250,12 +250,13 @@ def _config(address):
 
 def test_the_outbox_shows_the_footer_and_asks_for_a_missing_address(client, monkeypatch):
     import sellbird.config
-    monkeypatch.setattr(sellbird.config, "load_config", lambda: _config(""))
+    import sellbird.dashboard
+    monkeypatch.setattr(sellbird.dashboard, "load_config", lambda: _config(""))
     data = client.get("/api/outbox").json()
     assert data["footer"] == LINE
     assert "postal_address" in data["compliance_notice"]
 
-    monkeypatch.setattr(sellbird.config, "load_config", lambda: _config(ADDRESS))
+    monkeypatch.setattr(sellbird.dashboard, "load_config", lambda: _config(ADDRESS))
     data = client.get("/api/outbox").json()
     assert data["footer"] == ADDRESS + "\n" + LINE
     assert data["compliance_notice"] == ""
@@ -263,10 +264,11 @@ def test_the_outbox_shows_the_footer_and_asks_for_a_missing_address(client, monk
 
 def test_an_unreadable_config_still_shows_the_outbox(client, monkeypatch):
     import sellbird.config
+    import sellbird.dashboard
 
     def broken():
         raise sellbird.config.ConfigError("bad yaml")
-    monkeypatch.setattr(sellbird.config, "load_config", broken)
+    monkeypatch.setattr(sellbird.dashboard, "load_config", broken)
     data = client.get("/api/outbox").json()
     assert data["footer"] == "" and "pending" in data
 
@@ -404,7 +406,8 @@ def test_no_opt_out_line_is_warned_about_too():
 def test_an_edit_the_footer_would_push_over_the_limit_is_refused(client, monkeypatch, env):
     import sqlite3
     import sellbird.config
-    monkeypatch.setattr(sellbird.config, "load_config", lambda: SimpleNamespace(
+    import sellbird.dashboard
+    monkeypatch.setattr(sellbird.dashboard, "load_config", lambda: SimpleNamespace(
         channels=SimpleNamespace(email=SimpleNamespace(enabled=True)),
         compliance=ComplianceConfig(postal_address=ADDRESS)))
     with closing(sqlite3.connect(env["db"])) as db, db:
@@ -418,7 +421,8 @@ def test_an_edit_the_footer_would_push_over_the_limit_is_refused(client, monkeyp
 
 def test_campaigns_carry_the_footer_for_sending_by_hand(client, monkeypatch, env):
     import sellbird.config
-    monkeypatch.setattr(sellbird.config, "load_config", lambda: _config(ADDRESS))
+    import sellbird.dashboard
+    monkeypatch.setattr(sellbird.dashboard, "load_config", lambda: _config(ADDRESS))
     from tests.test_dashboard_manual_send import _campaign, _prospect
     _prospect(env, "p1", "a@acme.test", status="queued")
     _campaign(env, "c1", ["p1"])

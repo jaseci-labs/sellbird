@@ -241,6 +241,8 @@ def fake_config(enabled=True, provider="gmail"):
 def check_on(monkeypatch, **kwargs):
     import sellbird.config as config_mod
     monkeypatch.setattr(config_mod, "load_config", lambda *a, **k: fake_config(**kwargs))
+    import sellbird.dashboard as dash
+    monkeypatch.setattr(dash, "load_config", lambda *a, **k: fake_config(**kwargs))
 
 
 def _now():
