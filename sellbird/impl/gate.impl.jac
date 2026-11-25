@@ -2,16 +2,14 @@ impl GateResult.__bool__ -> bool {
     return self.ok;
 }
 
-impl _clean_text(raw) -> builtins.str {
-    text: any = unicodedata.normalize("NFKC", `str(raw or ""));
-    return _INVISIBLE_RE.sub("", text).replace("。", ".");
+impl _clean_text(raw: any) -> str {
+    text = unicodedata.normalize("NFKC", str(raw or ""));
+    return _INVISIBLE_RE.sub("", text).replace("\u3002", ".");
 }
 
-impl _dnc_domain(value: builtins.str) -> builtins.str {
-    domain: any = value.split(":", 1)[0].strip().strip(".");
-    if domain.startswith("www.") {
-        domain = domain[4:];
-    }
+impl _dnc_domain(value: str) -> str {
+    domain = value.split(":", 1)[0].strip().strip(".");
+    domain = domain[4:] if domain.startswith("www.") else domain;
     try {
         domain = domain.encode("idna").decode("ascii");
     } except UnicodeError {
@@ -20,308 +18,189 @@ impl _dnc_domain(value: builtins.str) -> builtins.str {
     return domain if _DNC_DOMAIN_RE.match(domain) else "";
 }
 
-impl do_not_contact_entry(raw) -> builtins.str {
-    `entry: any = _clean_text(raw).strip().lower();
-    `entry = re.sub("^(?:[a-z][a-z0-9+.-]*://|mailto:)", "", `entry);
-    `entry = re.split("[/?#]", `entry, maxsplit=1)[0];
-    `entry = re.sub("^(?:\\*@|\\*\\.|@)", "", `entry);
-    if "@" in `entry {
-        local: any;
-        _: any;
-        domain: any;
-        (local, _, domain) = `entry.rpartition("@") as any;
-        domain = _dnc_domain(domain);
-        if not domain or not _DNC_LOCAL_RE.match(local) {
-            return "";
-        }
-        return f"{local}@{domain}";
+impl do_not_contact_entry(raw: any) -> str {
+    e = re.sub("^(?:[a-z][a-z0-9+.-]*://|mailto:)", "", _clean_text(raw).strip().lower());
+    e = re.sub("^(?:\\*@|\\*\\.|@)", "", re.split("[/?#]", e, maxsplit=1)[0]);
+    if "@" not in e {
+        return _dnc_domain(e);
     }
-    return _dnc_domain(`entry);
+    (local, _, domain) = e.rpartition("@");
+    domain = _dnc_domain(domain);
+    return f"{local}@{domain}" if domain and _DNC_LOCAL_RE.match(local) else "";
 }
 
-impl do_not_contact_entries(raw) -> builtins.list[builtins.str] {
-    text: any = _clean_text(raw);
-    parts: any = re.findall("<([^<>\\s]+@[^<>\\s]+)>", text) or re.split("[\\s,;]+", text);
-    found: any = [];
-    for part in parts {
-        if not part.strip() {
-            continue;
-        }
-        `entry: any = do_not_contact_entry(part);
-        if not `entry {
-            raise ValueError(f"'{part.strip()}' is not an email address or a domain");
-        }
-        found.append(`entry);
+impl do_not_contact_entries(raw: any) -> list[str] {
+    text = _clean_text(raw);
+    parts: list[any] = re.findall("<([^<>\\s]+@[^<>\\s]+)>", text) or re.split("[\\s,;]+", text);
+    parts = [p for p in parts if p.strip()];
+    bad = [p for p in parts if not do_not_contact_entry(p)];
+    if bad {
+        raise ValueError(f"'{bad[0].strip()}' is not an email address or a domain");
     }
-    return found;
+    return [do_not_contact_entry(p) for p in parts];
 }
 
-impl do_not_contact_match(to_email: builtins.str, entries) -> builtins.str {
-    address: any = (to_email or "").strip().lower();
-    if "@" not in address or not entries {
-        return "";
-    }
-    local: any;
-    _: any;
-    host: any;
-    (local, _, host) = address.rpartition("@") as any;
-    host = _host(host);
-    base_local: any = local.split("+", 1)[0];
-    for raw in entries {
-        `entry: any = do_not_contact_entry(raw);
-        if not `entry {
-            continue;
-        }
-        if "@" in `entry {
-            e_local: any;
-            e_host: any;
-            (e_local, _, e_host) = `entry.rpartition("@") as any;
-            if e_host == host and e_local in (local, base_local) {
-                return `entry;
-            }
-        } elif host == `entry or host.endswith("." + `entry) {
-            return `entry;
+impl _covers(host: str, domains: any) -> bool {
+    return any(host == d or host.endswith("." + d) for d in domains);
+}
+
+impl _is_our_number(number: str, ours: set[str]) -> bool {
+    d = _digits(number);
+    return any(d == o or (len(d) >= 7 and (o.endswith(d) or d.endswith(o))) for o in ours);
+}
+
+impl _dnc_find(local: str | None, host: str, entries: any) -> str {
+    for e in (do_not_contact_entry(raw) for raw in entries or ()) {
+        (e_local, at, e_host) = e.rpartition("@");
+        mine = local is not None and e_host == host and e_local in (local, local.split("+")[0]);
+        if e and (mine if at else _covers(host, (e,))) {
+            return e;
         }
     }
     return "";
 }
 
-impl do_not_contact_domain_match(domain: builtins.str, entries) -> builtins.str {
-    host: any = _host(domain or "");
-    if not host or "@" in host or not entries {
-        return "";
-    }
-    for raw in entries {
-        `entry: any = do_not_contact_entry(raw);
-        if not `entry or "@" in `entry {
-            continue;
-        }
-        if host == `entry or host.endswith("." + `entry) {
-            return `entry;
-        }
-    }
-    return "";
+impl do_not_contact_match(to_email: str, entries: any) -> str {
+    (local, at, host) = (to_email or "").strip().lower().rpartition("@");
+    return _dnc_find(local, _host(host), entries) if at else "";
+}
+
+impl do_not_contact_domain_match(domain: str, entries: any) -> str {
+    host = _host(domain or "");
+    return _dnc_find(None, host, entries) if host and "@" not in host else "";
 }
 
 impl pre_send_check(
-    to_email: builtins.str,
-    subject: builtins.str,
-    body: builtins.str,
-    prospect=None,
-    allow_risky: builtins.bool = False,
-    kind: builtins.str = "sequence",
-    postal_address: builtins.str = "",
-    do_not_contact=(),
+    to_email: str,
+    subject: str,
+    body: str,
+    prospect: any = None,
+    allow_risky: bool = False,
+    kind: str = "sequence",
+    postal_address: str = "",
+    do_not_contact: any = (),
 ) -> GateResult {
-    reasons: builtins.list[builtins.str] = [];
     subject = (subject or "").strip();
     body = (body or "").strip();
     to_email = (to_email or "").strip().lower();
-    if not EMAIL_RE.match(to_email) {
-        reasons.append(f"invalid recipient address '{to_email}'");
-    }
-    blocked: any = do_not_contact_match(to_email, do_not_contact);
-    if blocked {
-        reasons.append(f"'{blocked}' is on the do-not-contact list");
-    }
-    if prospect is not None {
-        if (prospect.email or "").strip().lower() != to_email {
-            reasons.append("recipient does not match the prospect record");
-        }
-        allowed: any = DELIVERABLE_STATUSES if allow_risky else {"verified"};
-        if kind == "sequence" and (prospect.email_status or "guess") not in allowed {
-            reasons.append(
-                "email_status '"
-                    + format(prospect.email_status or "guess", "")
-                    + "' is not deliverable",
-            );
-        }
-    }
-    if not subject {
-        reasons.append("empty subject");
-    }
-    if not body {
-        reasons.append("empty body");
-    }
-    if len(subject) > MAX_SUBJECT_LEN {
-        reasons.append(f"subject too long ({len(subject)} > {MAX_SUBJECT_LEN})");
-    }
-    word_count: any = len(body.split());
-    if word_count > MAX_BODY_WORDS {
-        reasons.append(f"body too long ({word_count} words > {MAX_BODY_WORDS})");
-    }
-    leftover: any = MERGE_TAG_RE.findall(subject + " " + body);
-    if leftover {
-        reasons.append(f"unrendered merge tags: {sorted(`set(leftover))[:3]}");
-    }
-    lowered: any = (subject + " " + body).lower();
-    hits: any = [p for p in BANNED_PHRASES if p in lowered];
-    if hits {
-        reasons.append(f"banned phrases: {hits[:3]}");
-    }
-    links: any = URL_RE.findall(body);
-    if len(links) > MAX_LINKS {
-        reasons.append(f"too many links ({len(links)} > {MAX_LINKS})");
-    }
-
-    if kind == "sequence" and postal_address.strip() and postal_address.strip() not in body {
-        reasons.append("postal address footer missing");
-    }
-    if re.search("<\\s*(html|body|div|table|img|a)\\b", body, re.IGNORECASE) {
-        reasons.append("HTML markup in body (plain text only)");
-    }
-
+    blocked = do_not_contact_match(to_email, do_not_contact);
+    seq = kind == "sequence";
+    status = (prospect.email_status or "guess") if prospect is not None and seq else "verified";
+    undeliverable = status not in (DELIVERABLE_STATUSES if allow_risky else {"verified"});
+    mismatch = prospect is not None and (prospect.email or "").strip().lower() != to_email;
+    (word_count, links) = (len(body.split()), len(URL_RE.findall(body)));
+    postal = postal_address.strip();
+    leftover = MERGE_TAG_RE.findall(subject + " " + body);
+    hits = [p for p in BANNED_PHRASES if p in (subject + " " + body).lower()];
+    html = re.search("(?i)<\\s*(html|body|div|table|img|a)\\b", body);
+    checks = [
+        (not EMAIL_RE.match(to_email), f"invalid recipient address '{to_email}'"),
+        (blocked, f"'{blocked}' is on the do-not-contact list"),
+        (mismatch, "recipient does not match the prospect record"),
+        (undeliverable, f"email_status '{status}' is not deliverable"),
+        (not subject, "empty subject"),
+        (not body, "empty body"),
+        (len(subject) > MAX_SUBJECT_LEN, f"subject too long ({len(subject)} > {MAX_SUBJECT_LEN})"),
+        (word_count > MAX_BODY_WORDS, f"body too long ({word_count} words > {MAX_BODY_WORDS})"),
+        (leftover, f"unrendered merge tags: {sorted(set(leftover))[:3]}"),
+        (hits, f"banned phrases: {hits[:3]}"),
+        (links > MAX_LINKS, f"too many links ({links} > {MAX_LINKS})"),
+        (seq and postal and postal not in body, "postal address footer missing"),
+        (html, "HTML markup in body (plain text only)"),
+    ];
+    reasons = [msg for (bad, msg) in checks if bad];
     return GateResult(ok=not reasons, reasons=reasons);
 }
 
-impl _normalize(text: builtins.str) -> builtins.str {
-    import unicodedata;
-    text = unicodedata.normalize("NFKC", text or "");
-    text = _ZERO_WIDTH_RE.sub("", text).replace("。", ".").replace("｡", ".");
-    text = _DOT_FORMS_RE.sub(".", text);
-    text = _SPACED_DOT_RE.sub(".", text);
-    return _SPOKEN_DOT_RE.sub(".", text);
+impl _normalize(text: str) -> str {
+    text = _ZERO_WIDTH_RE.sub("", unicodedata.normalize("NFKC", text or ""));
+    text = _DOT_FORMS_RE.sub(".", text.replace("\u3002", ".").replace("\uff61", "."));
+    return _SPOKEN_DOT_RE.sub(".", _SPACED_DOT_RE.sub(".", text));
 }
 
-impl _host(value: builtins.str) -> builtins.str {
-    h: any = (value or "").strip().strip(".").lower();
+impl _host(value: str) -> str {
+    h = (value or "").strip().strip(".").lower();
     return h[4:] if h.startswith("www.") else h;
 }
 
-impl find_links(text: builtins.str) -> builtins.list[builtins.tuple[builtins.str, builtins.str]] {
-    import from urllib.parse { urlsplit }
+impl find_links(text: str) -> list[tuple[str, str]] {
     text = _normalize(text);
-    found: builtins.list[builtins.tuple[builtins.str, builtins.str]] = [];
-    m: any;
+    found: list[tuple[str, str]] = [];
     for m in _SCHEME_URL_RE.finditer(text) {
-        url: any = m.group(0).replace("\\", "/");
         try {
-            parts: any = urlsplit(url);
-            host: any = _host(parts.hostname or "");
-            path: any = parts.path;
+            parts = urlsplit(m.group(0).replace("\\", "/"));
+            (host, path) = (_host(parts.hostname or ""), str(parts.path));
         } except ValueError {
             (host, path) = ("", "");
         }
-        if not _HOST_OK_RE.match(host) {
-            (host, path) = (UNREADABLE_LINK, "");
-        }
+        (host, path) = (host, path) if _HOST_OK_RE.match(host) else (UNREADABLE_LINK, "");
         found.append((host, host + path));
     }
-    rest: any = _SCHEME_URL_RE.sub(" ", text);
-    for m in _EMAIL_HOST_RE.finditer(rest) {
-        found.append((_host(m.group(1)), _host(m.group(1))));
-    }
+    rest = _SCHEME_URL_RE.sub(" ", text);
+    found += [(_host(m.group(1)), _host(m.group(1))) for m in _EMAIL_HOST_RE.finditer(rest)];
     rest = _EMAIL_HOST_RE.sub(" ", rest);
-    for m in _IP_RE.finditer(rest) {
-        found.append((m.group(0), m.group(0)));
-    }
+    found += [(m.group(0), m.group(0)) for m in _IP_RE.finditer(rest)];
     for m in _BARE_RE.finditer(rest) {
-        ending: any;
-        has_path: any;
-        (ending, has_path) = (m.group(2).lower(), `bool(m.group(3)));
-        www: any = m.group(1).lower().startswith("www.");
-        if not has_path
-            and not www
-            and (ending in _FILE_ENDINGS or not (len(ending) == 2 or ending in _KNOWN_ENDINGS))
+        ending = m.group(2).lower();
+        if m.group(3)
+            or m.group(1).lower().startswith("www.")
+            or ending not in _FILE_ENDINGS and (len(ending) == 2 or ending in _KNOWN_ENDINGS)
         {
-            continue;
-        }
-        host = _host(m.group(1));
-        found.append((host, host + (m.group(3) or "").split("?")[0].split("#")[0]));
-    }
-    out: any;
-    seen: any;
-    (out, seen) = ([], set[any]());
-    for (host, link) in found {
-        if host and (host, link) not in seen {
-            seen.add((host, link));
-            out.append((host, link));
+            host = _host(m.group(1));
+            found.append((host, host + (m.group(3) or "").split("?")[0].split("#")[0]));
         }
     }
-    return out;
+    return list(dict.fromkeys(f for f in found if f[0]));
 }
 
-impl find_link_domains(text: builtins.str) -> builtins.list[builtins.str] {
-    return `list(dict.fromkeys(host for (host, _) in find_links(text)));
+impl find_link_domains(text: str) -> list[str] {
+    return list(dict.fromkeys(host for (host, _) in find_links(text)));
 }
 
-impl _booking_prefix(config) -> builtins.str {
-    offer: any = getattr(getattr(config, "product", None), "offer", None);
-    links: any = find_links(`str(getattr(offer, "booking_url", "") or ""));
+impl _booking_prefix(config: any) -> str {
+    offer = getattr(getattr(config, "product", None), "offer", None);
+    links = find_links(str(getattr(offer, "booking_url", "") or ""));
     return links[0][1].rstrip("/") if links else "";
 }
 
-impl allowed_link_domains(config) -> builtins.set[builtins.str] {
-    persona: any = getattr(config, "persona", None);
-    email_cfg: any = getattr(getattr(config, "channels", None), "email", None);
-    out: builtins.set[builtins.str] = set[any]();
-    address: any = `str(getattr(persona, "email", "") or "");
-    if "@" in address {
-        out.add(_host(address.rsplit("@", 1)[1]));
-    }
-    for `entry in getattr(email_cfg, "link_domains", None) or [] {
-        out.update(find_link_domains(`str(`entry)) or [_host(`str(`entry))]);
+impl allowed_link_domains(config: any) -> set[str] {
+    address = str(getattr(getattr(config, "persona", None), "email", "") or "");
+    email_cfg = getattr(getattr(config, "channels", None), "email", None);
+    out: set[str] = {_host(address.rsplit("@", 1)[1])} if "@" in address else set[str]();
+    for e in getattr(email_cfg, "link_domains", None) or [] {
+        out.update(find_link_domains(str(e)) or [_host(str(e))]);
     }
     return {d for d in out if d};
 }
 
-impl _is_ours(host: builtins.str, allowed: builtins.set[builtins.str]) -> builtins.bool {
-    return `any(operator.eq(host, d) or host.endswith("." + d) for d in allowed);
-}
-
-impl _is_booking_page(link: builtins.str, prefix: builtins.str) -> builtins.bool {
-    import from urllib.parse { unquote }
-    if not prefix {
-        return False;
-    }
+impl _is_booking_page(link: str, prefix: str) -> bool {
     link = unquote(unquote(link));
-    if `any(seg in ("..", ".") for seg in link.split("/")[1:]) {
-        return False;
-    }
-    return operator.eq(link.rstrip("/"), prefix) or link.startswith(prefix + "/");
+    return bool(prefix)
+        and not any(seg in ("..", ".") for seg in link.split("/")[1:])
+        and (link.rstrip("/") == prefix or link.startswith(prefix + "/"));
 }
 
-impl _shown(host: builtins.str, link: builtins.str, prefix: builtins.str) -> builtins.str {
-    if prefix and host == prefix.split("/", 1)[0] {
-        return "/".join(link.split("/")[:2]);
-    }
-    return host;
-}
-
-impl _words(text: builtins.str) -> builtins.list[builtins.str] {
+impl _words(text: str) -> list[str] {
     return _WORD_RE.findall((text or "").lower());
 }
 
-impl _instruction_runs(`root) -> builtins.dict[builtins.tuple, builtins.str] {
-    import from sellbird.untrusted { UNTRUSTED_RULE }
-    files: any = sorted(
-        p
-        for folder in ("prompts", "skills")
-        for p in (`root / folder).glob("*.md")
-        if p.name not in _SAY_ALOUD_FILES,
-    );
-    key: any = (`str(`root), `tuple((`str(p), p.stat().st_mtime_ns) for p in files));
+impl _instruction_runs(base: any) -> dict[any, str] {
+    files = [p for d in ("prompts", "skills") for p in (base / d).glob("*.md")];
+    files = sorted(p for p in files if p.name not in _SAY_ALOUD_FILES);
+    key = (str(base), tuple((str(p), p.stat().st_mtime_ns) for p in files));
     if _leak_cache.get("key") != key {
-        runs: builtins.dict[builtins.tuple, builtins.str] = {};
-        sources: any = [
-            (
-                p.name,
-                _QUOTED_RE.sub(
-                    " | ",
-                    "\n".join(
-                        line
-                        for line in p.read_text(encoding="utf-8", errors="replace").splitlines()
-                        if not _SCRIPT_LINE_RE.match(line),
-                    ),
-                ),
-            )
-            for p in files
-        ];
+        runs: dict[any, str] = {};
+        sources: list[tuple[str, str]] = [];
+        for p in files {
+            lines = p.read_text(encoding="utf-8", errors="replace").splitlines();
+            text = "\n".join(l for l in lines if not _SCRIPT_LINE_RE.match(l));
+            sources.append((p.name, _QUOTED_RE.sub(" | ", text)));
+        }
         sources.append(("Sellbird's prompt rules", UNTRUSTED_RULE));
         for (name, text) in sources {
-            words: any = _words(text);
-            for i in range(len(words) - LEAK_RUN_WORDS + 1) {
-                runs.setdefault(`tuple(words[i:i + LEAK_RUN_WORDS]), name);
+            ws = _words(text);
+            for i in range(len(ws) - LEAK_RUN_WORDS + 1) {
+                runs.setdefault(tuple(ws[i:i + LEAK_RUN_WORDS]), name);
             }
         }
         _leak_cache.update(key=key, runs=runs);
@@ -329,99 +208,66 @@ impl _instruction_runs(`root) -> builtins.dict[builtins.tuple, builtins.str] {
     return _leak_cache["runs"];
 }
 
-impl _digits(value: builtins.str) -> builtins.str {
-    digits: any = re.sub("\\D", "", value or "");
+impl _digits(value: str) -> str {
+    digits = re.sub("\\D", "", value or "");
     return digits[2:] if digits.startswith("00") else digits;
 }
 
-impl find_phone_numbers(text: builtins.str) -> builtins.list[builtins.str] {
-    text = _normalize(text);
-    found: any = [];
-    for m in _PHONE_RE.finditer(text) {
-        raw: any = m.group(0).strip();
-        digits: any = _digits(raw);
-        if _ISO_DATE_RE.match(raw)
-            or not 7 <= len(digits) <= 15
-            or raw.isdigit() and len(digits) < 10
-        {
-            continue;
+impl find_phone_numbers(text: str) -> list[str] {
+    found: list[str] = [];
+    for m in _PHONE_RE.finditer(_normalize(text)) {
+        (raw, n) = (m.group(0).strip(), len(_digits(m.group(0).strip())));
+        if not _ISO_DATE_RE.match(raw) and n >= 7 and n <= 15 and not (raw.isdigit() and n < 10) {
+            found.append(raw);
         }
-        found.append(raw);
     }
     return found;
 }
 
-impl _is_our_number(number: builtins.str, ours: builtins.set[builtins.str]) -> builtins.bool {
-    d: any;
-    d = _digits(number);
-    return `any(
-        operator.eq(d, o) or operator.ge(len(d), 7) and (o.endswith(d) or d.endswith(o))
-        for o in ours,
-    );
-}
-
-impl own_phone_numbers(config) -> builtins.set[builtins.str] {
-    email_cfg: any = getattr(getattr(config, "channels", None), "email", None);
-    compliance: any = getattr(config, "compliance", None);
-    out: any = {_digits(`str(n)) for n in getattr(email_cfg, "phone_numbers", None) or []};
-    out.update(
-        _digits(n)
-        for n in find_phone_numbers(`str(getattr(compliance, "postal_address", "") or "")),
-    );
+impl own_phone_numbers(config: any) -> set[str] {
+    email_cfg = getattr(getattr(config, "channels", None), "email", None);
+    postal = str(getattr(getattr(config, "compliance", None), "postal_address", "") or "");
+    out = {_digits(str(n)) for n in (getattr(email_cfg, "phone_numbers", None) or [])};
+    out.update(_digits(n) for n in find_phone_numbers(postal));
     return {d for d in out if len(d) >= 7};
 }
 
 impl autopilot_review(
-    subject: builtins.str, body: builtins.str, config, `root=None, recipient: builtins.str = ""
-) -> builtins.list[builtins.str] {
-    allowed: any;
-    prefix: any;
-    ours: any;
-    import from sellbird.paths { PROJECT_ROOT }
-    reasons: builtins.list[builtins.str] = [];
-    text: any = format(subject or "", "") + "\n" + format(body or "", "");
+    subject: str, body: str, config: any, `root: any = None, recipient: str = ""
+) -> list[str] {
+    text = (subject or "") + "\n" + (body or "");
     allowed = allowed_link_domains(config);
     if "@" in (recipient or "") {
         allowed.add(_host(recipient.rsplit("@", 1)[1]));
     }
     prefix = _booking_prefix(config);
-    foreign: any = `list(
-        dict.fromkeys(
-            _shown(host, link, prefix)
-            for (host, link) in find_links(text)
-            if not _is_ours(host, allowed) and not _is_booking_page(link, prefix),
-        ),
-    );
-    if foreign {
-        reasons.append(
-            "links to "
-                + format(", ".join(foreign[:3]), "")
-                + ", not one of your domains (add it to channels.email.link_domains if it's yours)",
-        );
-    }
-    ours = own_phone_numbers(config);
-    numbers: any = `list(
-        dict.fromkeys(n for n in find_phone_numbers(text) if not _is_our_number(n, ours))
-    );
-    if numbers {
-        reasons.append(
-            "gives the phone number "
-                + format(", ".join(numbers[:3]), "")
-                + ", not one of yours (add it to channels.email.phone_numbers if it's yours)",
-        );
-    }
-    payment: any = _PAYMENT_RE.search(_normalize(text));
-    if payment {
-        reasons.append(f"asks about sending money (\"{payment.group(0)}\")");
-    }
-    words: any = _words(text);
-    runs: any = _instruction_runs(`root or PROJECT_ROOT);
-    for i in range(len(words) - LEAK_RUN_WORDS + 1) {
-        source: any = runs.get(`tuple(words[i:i + LEAK_RUN_WORDS]));
-        if source {
-            reasons.append(f"quotes Sellbird's instructions ({source})");
-            break;
+    shared = prefix.split("/", 1)[0];
+    foreign: list[str] = [];
+    for (host, link) in find_links(text) {
+        if not _covers(host, allowed) and not _is_booking_page(link, prefix) {
+            foreign.append("/".join(link.split("/")[:2]) if prefix and host == shared else host);
         }
     }
-    return reasons;
+    foreign = list(dict.fromkeys(foreign));
+    ours = own_phone_numbers(config);
+    numbers = [n for n in find_phone_numbers(text) if not _is_our_number(n, ours)];
+    numbers = list(dict.fromkeys(numbers));
+    payment = _PAYMENT_RE.search(_normalize(text));
+    (ws, k) = (_words(text), LEAK_RUN_WORDS);
+    runs = _instruction_runs(`root or PROJECT_ROOT);
+    found = [runs.get(tuple(ws[i:i + k]), "") for i in range(len(ws) - k + 1)];
+    source = next((s for s in found if s), "");
+    checks = [
+        (
+            foreign,
+            f"links to {', '.join(foreign[:3])}, not one of your domains (add it to channels.email.link_domains if it's yours)",
+        ),
+        (
+            numbers,
+            f"gives the phone number {', '.join(numbers[:3])}, not one of yours (add it to channels.email.phone_numbers if it's yours)",
+        ),
+        (payment, f"asks about sending money (\"{payment.group(0) if payment else ''}\")"),
+        (source, f"quotes Sellbird's instructions ({source})"),
+    ];
+    return [msg for (bad, msg) in checks if bad];
 }
