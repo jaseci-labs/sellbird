@@ -1,16 +1,4 @@
-impl LookupFailed.__repr__ -> str {
-    return (getattr(builtins.super(LookupFailed, self), "__repr__") as any)();
-}
-
-impl LookupFailed.__eq__(other: any) -> bool {
-    return self is other;
-}
-
-impl LookupFailed.__hash__ -> int {
-    return id(self);
-}
-
-impl _resolve(name: builtins.str, rtype: builtins.str) -> any {
+impl _resolve(name: str, rtype: str) -> any {
     try {
         return `list(dns.resolver.resolve(name, rtype, lifetime=8));
     } except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer) {
@@ -20,119 +8,105 @@ impl _resolve(name: builtins.str, rtype: builtins.str) -> any {
     }
 }
 
-impl _txt(name: builtins.str) -> builtins.list[builtins.str] {
+impl _txt(name: str) -> list[str] {
     return [b"".join(r.strings).decode("utf-8", "replace") for r in _resolve(name, "TXT")];
 }
 
-impl _a(name: builtins.str) -> builtins.list[builtins.str] {
+impl _a(name: str) -> list[str] {
     return [r.address for r in _resolve(name, "A")];
 }
 
-impl _unknown(name: builtins.str, e: any) -> Check {
-    return Check(
-        name,
-        INFO,
-        f"Couldn't look this up ({e}). Check your connection and run again.",
-        unknown=True,
-    );
+impl _unknown(name: str, e: any) -> Check {
+    return Check(name, INFO, _TEXT["unknown"].format(e), unknown=True);
 }
 
-impl check_mx(domain: builtins.str) -> Check {
+impl check_mx(domain: str) -> Check {
     try {
-        mx: any = sorted(_resolve(domain, "MX"), key=lambda (r) -> any { r.preference });
+        mx = sorted(_resolve(domain, "MX"), key=lambda (r: any) -> any { r.preference });
     } except LookupFailed as e {
         return _unknown("MX", e);
     }
     if not mx {
-        return Check("MX", FAIL, "No MX record - replies and bounces have nowhere to go.");
+        return Check("MX", FAIL, _TEXT["mx_none"]);
     }
     return Check("MX", OK, ", ".join(`str(r.exchange).rstrip(".") for r in mx[:3]));
 }
 
-impl check_spf(domain: builtins.str) -> Check {
+impl _records(name: str, label: str, prefix: str) -> any {
     try {
-        records: any = [t for t in _txt(domain) if t.lower().startswith("v=spf1")];
+        return [t for t in _txt(name) if t.lower().startswith(prefix)];
     } except LookupFailed as e {
-        return _unknown("SPF", e);
+        return _unknown(label, e);
     }
-    if not records {
+}
+
+impl check_spf(domain: str) -> Check {
+    records = _records(domain, "SPF", "v=spf1");
+    if isinstance(records, Check) {
+        return records;
+    }
+    if len(records) != 1 {
         return Check(
-            "SPF", FAIL, "No SPF record. Add the TXT record your mail provider gives you."
+            "SPF", FAIL, _TEXT["spf_many"].format(len(records)) if records else _TEXT["spf_none"]
         );
     }
-    if len(records) > 1 {
-        return Check(
-            "SPF", FAIL, f"{len(records)} SPF records - receivers treat that as no SPF. Merge them."
-        );
-    }
-    spf: any = records[0];
-    terms: any = spf.lower().split();
-    if "+all" in terms or "all" in terms {
-        return Check("SPF", FAIL, f"'+all' lets anyone send as you: {spf}");
-    }
-    lookups: any = sum(
+    spf = records[0];
+    terms = spf.lower().split();
+    lookups = sum(
         t.lstrip("+-~?").split(":")[0].split("=")[0].split("/")[0]
             in ("include", "a", "mx", "ptr", "exists", "redirect")
         for t in terms,
     );
-    if lookups > 10 {
-        return Check("SPF", FAIL, f"{lookups} DNS lookups (limit is 10) - SPF will permerror.");
-    }
-    if "?all" in terms {
+    if "+all" in terms or "all" in terms {
+        return Check("SPF", FAIL, f"'+all' lets anyone send as you: {spf}");
+    } elif lookups > 10 {
+        return Check("SPF", FAIL, _TEXT["spf_lookups"].format(lookups));
+    } elif "?all" in terms {
         return Check("SPF", WARN, f"'?all' is neutral; use '~all' or '-all': {spf}");
-    }
-    if not `any(operator.eq(t.lstrip("+-~?"), "all") or t.startswith("redirect=") for t in terms) {
-        return Check("SPF", WARN, f"No 'all' at the end, so it ends neutral; add '~all': {spf}");
+    } elif not `any(t.lstrip("+-~?") == "all" or t.startswith("redirect=") for t in terms) {
+        return Check("SPF", WARN, _TEXT["spf_no_all"].format(spf));
     }
     return Check("SPF", OK, spf);
 }
 
-impl check_dmarc(domain: builtins.str) -> Check {
-    try {
-        records: any = [t for t in _txt(f"_dmarc.{domain}") if t.lower().startswith("v=dmarc1")];
-    } except LookupFailed as e {
-        return _unknown("DMARC", e);
+impl check_dmarc(domain: str) -> Check {
+    records = _records(f"_dmarc.{domain}", "DMARC", "v=dmarc1");
+    if isinstance(records, Check) {
+        return records;
     }
-    if not records {
+    if len(records) != 1 {
         return Check(
             "DMARC",
             FAIL,
-            f"No DMARC record. Gmail and Yahoo require one for bulk senders. Start with TXT _dmarc.{domain} = \"v=DMARC1; p=none; rua=mailto:you@{domain}\"",
+            _TEXT["dmarc_many"].format(len(records))
+                if records
+                else _TEXT["dmarc_none"].format(domain),
         );
     }
-    if len(records) > 1 {
-        return Check(
-            "DMARC", FAIL, f"{len(records)} DMARC records - receivers ignore them all. Keep one."
-        );
-    }
-    tags: any = {
+    tags = {
         k.strip().lower(): v
         for (k, v) in (part.strip().split("=", 1) for part in records[0].split(";") if "=" in part)
     };
-    policy: any = tags.get("p", "").strip().lower();
+    policy = tags.get("p", "").strip().lower();
     if not policy {
-        return Check("DMARC", WARN, f"No p= policy tag - add p=none to start: {records[0]}");
+        return Check("DMARC", WARN, _TEXT["dmarc_no_p"].format(records[0]));
     }
     if policy == "none" {
-        return Check(
-            "DMARC",
-            WARN,
-            f"p=none (monitoring only) - fine while warming; move to quarantine once reports look clean. {records[0]}",
-        );
+        return Check("DMARC", WARN, _TEXT["dmarc_p_none"].format(records[0]));
     }
     return Check("DMARC", OK, records[0]);
 }
 
-impl check_dkim(domain: builtins.str, selector: builtins.str = "") -> Check {
-    selectors: any = (selector,) if selector else COMMON_DKIM_SELECTORS;
-    for sel in selectors {
+impl check_dkim(domain: str, selector: str = "") -> Check {
+    for sel in ((selector,) if selector else COMMON_DKIM_SELECTORS) {
         try {
-            records: any = _txt(f"{sel}._domainkey.{domain}");
+            records = _txt(f"{sel}._domainkey.{domain}");
         } except LookupFailed as e {
             return _unknown("DKIM", e);
         }
         for record in records {
-            if "p=" in record.replace(" ", "") and "p=;" not in record.replace(" ", "") + ";" {
+            flat = record.replace(" ", "");
+            if "p=" in flat and "p=;" not in flat + ";" {
                 return Check("DKIM", OK, f"selector '{sel}' found");
             }
         }
@@ -140,110 +114,97 @@ impl check_dkim(domain: builtins.str, selector: builtins.str = "") -> Check {
     if selector {
         return Check("DKIM", FAIL, f"No DKIM key at {selector}._domainkey.{domain}.");
     }
-    return Check(
-        "DKIM",
-        WARN,
-        "No key at any common selector. If your provider uses a custom one, set channels.email.warmup.dkim_selector; otherwise turn DKIM on in your provider.",
-    );
+    return Check("DKIM", WARN, _TEXT["dkim_none"]);
 }
 
-impl check_domain_age(domain: builtins.str) -> Check {
+impl check_domain_age(domain: str) -> Check {
     try {
-        r: any = httpx.get(f"https://rdap.org/domain/{domain}", timeout=15, follow_redirects=True);
+        r = httpx.get(f"https://rdap.org/domain/{domain}", timeout=15, follow_redirects=True);
         r.raise_for_status();
-        events: any = r.json().get("events", []);
+        events = r.json().get("events", []);
     } except Exception as e {
         return Check(
             "Domain age", INFO, f"Couldn't look up registration date ({`type(e).__name__})."
         );
     }
-    registered: any = next(
+    registered = next(
         (e.get("eventDate") for e in events if e.get("eventAction") == "registration"), None
     );
     if not registered {
         return Check("Domain age", INFO, "Registry didn't publish a registration date.");
     }
     try {
-        age: any = (
+        age = (
             date.today() - datetime.fromisoformat(registered.replace("Z", "+00:00")).date()
         ).days;
     } except ValueError {
         return Check("Domain age", INFO, f"Registry gave an unreadable date ({registered[:40]}).");
     }
-    status: any = FAIL if age < MIN_DOMAIN_AGE_DAYS else WARN if age < GOOD_DOMAIN_AGE_DAYS else OK;
-    note: any = {
-        FAIL: " - brand-new domains are distrusted; warm only, no cold email yet.",
-        WARN: " - still young; keep volume low.",
-        OK: "",
-    }[status];
-    return Check("Domain age", status, f"{age} days (registered {registered[:10]}){note}");
+    head = f"{age} days (registered {registered[:10]})";
+    if age < MIN_DOMAIN_AGE_DAYS {
+        return Check("Domain age", FAIL, _TEXT["age_new"].format(head));
+    }
+    if age < GOOD_DOMAIN_AGE_DAYS {
+        return Check("Domain age", WARN, head + " - still young; keep volume low.");
+    }
+    return Check("Domain age", OK, head);
 }
 
-impl _blocklist_checks(query: builtins.str, label: builtins.str, lists) -> builtins.list[Check] {
-    refused: any;
-    checks: any = [];
-    zone: any;
-    for item_ in lists {
-        (zone, refused) = item_;
+impl _refused(hits: list[str], refusal: str) -> bool {
+    for ip in hits {
+        if refusal and (ip.startswith(refusal) if refusal.endswith(".") else ip == refusal) {
+            return True;
+        }
+    }
+    return False;
+}
+
+impl _blocklist_checks(query: str, label: str, lists: any) -> list[Check] {
+    checks: list[Check] = [];
+    for (zone, refusal, manual) in lists {
+        name = f"{label} {zone}";
         try {
-            hits: any = _a(f"{query}.{zone}");
+            hits = _a(f"{query}.{zone}");
         } except LookupFailed as e {
-            checks.append(_unknown(f"{label} {zone}", e));
+            checks.append(_unknown(name, e));
             continue;
         }
         if not hits {
-            checks.append(Check(f"{label} {zone}", OK, "not listed"));
-        } elif `any(refused(ip) for ip in hits) {
-            checks.append(
-                Check(
-                    f"{label} {zone}",
-                    INFO,
-                    f"list refused the query (common via public DNS like 8.8.8.8) - check manually at {MANUAL_LOOKUP.get(zone, zone)}",
-                ),
-            );
+            checks.append(Check(name, OK, "not listed"));
+        } elif _refused(hits, refusal) {
+            checks.append(Check(name, INFO, _TEXT["refused"].format(manual)));
         } else {
-            checks.append(
-                Check(f"{label} {zone}", FAIL, "LISTED (" + format(", ".join(hits), "") + ")")
-            );
+            checks.append(Check(name, FAIL, f"LISTED ({', '.join(hits)})"));
         }
     }
     return checks;
 }
 
-impl check_domain_blocklists(domain: builtins.str) -> builtins.list[Check] {
+impl check_domain_blocklists(domain: str) -> list[Check] {
     return _blocklist_checks(domain, "Blocklist", DOMAIN_BLOCKLISTS);
 }
 
-impl check_ip_blocklists(smtp_host: builtins.str) -> builtins.list[Check] {
+impl check_ip_blocklists(smtp_host: str) -> list[Check] {
     try {
-        ips: any = _a(smtp_host);
+        ips = _a(smtp_host);
     } except LookupFailed as e {
         return [_unknown("Sending IP", e)];
     }
     if not ips {
         return [Check("Sending IP", INFO, f"Couldn't resolve {smtp_host}.")];
     }
-    reversed_ip: any = ".".join(reversed(ips[0].split(".")));
-    return _blocklist_checks(reversed_ip, f"IP {ips[0]}", IP_BLOCKLISTS);
+    return _blocklist_checks(".".join(reversed(ips[0].split("."))), f"IP {ips[0]}", IP_BLOCKLISTS);
 }
 
 impl check_warmup(
-    warmup, ceiling: builtins.int, today: date | None = None, provider: builtins.str = ""
+    warmup: any, ceiling: int, today: date | None = None, provider: str = ""
 ) -> Check {
     if provider == "instantly" {
-        return Check(
-            "Warmup",
-            INFO,
-            "Sellbird's ramp doesn't apply to Instantly: use Instantly's own warmup and per-account daily limit.",
-        );
+        return Check("Warmup", INFO, _TEXT["ramp_instantly"]);
     }
-    days: any = warmup.days_in(today);
+    days = warmup.days_in(today);
     if days is None {
-        return Check(
-            "Warmup",
-            WARN,
-            "No warmup start date set, so sends aren't ramped. Once your warmup service is on, set channels.email.warmup.start_date: YYYY-MM-DD.",
-        );
+        return Check("Warmup", WARN, _TEXT["ramp_unset"]);
     }
     if days < 0 {
         return Check("Warmup", WARN, f"Starts {warmup.start_date} (in {-days} days).");
@@ -252,135 +213,88 @@ impl check_warmup(
         return Check(
             "Warmup",
             FAIL,
-            f"Day {days} of {warmup.min_days} - warming only, no cold email until {warmup.min_days - days} more day(s) pass.",
+            _TEXT["ramp_early"].format(days, warmup.min_days, warmup.min_days - days),
         );
     }
-    cap: any = warmup.daily_cap(ceiling, today);
-    if cap <= 0 and warmup.daily_increase <= 0 {
-        return Check(
-            "Warmup",
-            WARN,
-            "Today's cold cap is 0 and won't grow: raise start_sends or daily_increase.",
-        );
+    cap = warmup.daily_cap(ceiling, today);
+    step = warmup.daily_increase;
+    if cap <= 0 and step <= 0 {
+        return Check("Warmup", WARN, _TEXT["ramp_zero"]);
     }
-    if cap >= ceiling {
-        ramp: any = "full volume";
-    } elif warmup.daily_increase <= 0 {
+    ramp = "full volume";
+    if cap < ceiling and step <= 0 {
         ramp = f"stays at {cap}/day (daily_increase is 0)";
-    } else {
-        full_on: any = warmup.min_days
-            + -(-(ceiling - warmup.start_sends) // warmup.daily_increase);
-        ramp = f"reaches {ceiling}/day on day {full_on}";
+    } elif cap < ceiling {
+        ramp = f"reaches {ceiling}/day on day {warmup.min_days + -(-(ceiling - warmup.start_sends) // step)}";
     }
-    return Check(
-        "Warmup",
-        OK,
-        f"Day {days}: today's cap is {cap}/day ({ramp}). Keep the warmup service running alongside Sellbird.",
-    );
+    return Check("Warmup", OK, _TEXT["ramp_ok"].format(days, cap, ramp));
 }
 
 impl check_warmup_service(
-    health,
-    warmup=None,
+    health: any,
+    warmup: any = None,
     *,
-    error: builtins.str = "",
-    other_service: builtins.bool = False,
+    error: str = "",
+    other_service: bool = False,
     today: date | None = None,
 ) -> Check {
-    import from sellbird.integrations.trulyinbox { AFFILIATE_TAG, AFFILIATE_URL }
+    name = "Warmup service";
     if error {
-        return Check("Warmup service", WARN, f"Couldn't read TrulyInbox: {error}");
+        return Check(name, WARN, f"Couldn't read TrulyInbox: {error}");
     }
     if health is None {
-        if other_service {
-            return Check(
-                "Warmup service",
-                INFO,
-                "Using another warmup service: check its dashboard for the inbox rate before cold email.",
-            );
-        }
         return Check(
-            "Warmup service",
+            name,
             INFO,
-            f"Not connected, so Sellbird can't see whether this mailbox is warmed. We recommend TrulyInbox: it warms the mailbox, keeps it healthy, and Sellbird reads its inbox rate here. {AFFILIATE_URL} {AFFILIATE_TAG} Then run: sellbird trulyinbox connect",
+            _TEXT["ti_other"]
+                if other_service
+                else _TEXT["ti_none"].format(AFFILIATE_URL, AFFILIATE_TAG),
         );
     }
-    if not health.found {
-        return Check(
-            "Warmup service",
-            FAIL,
-            f"{health.address} isn't in your TrulyInbox account yet. Add it in TrulyInbox to start its warmup.",
-        );
+    for (ok, key) in (
+        (health.found, "ti_missing"),
+        (health.login_ok, "ti_login"),
+        (health.warming, "ti_off"),
+    ) {
+        if not ok {
+            return Check(name, FAIL, _TEXT[key].format(health.address));
+        }
     }
-    if not health.login_ok {
-        return Check(
-            "Warmup service",
-            FAIL,
-            f"TrulyInbox can't sign in to {health.address}. Reconnect the mailbox in TrulyInbox.",
-        );
-    }
-    if not health.warming {
-        return Check(
-            "Warmup service",
-            FAIL,
-            f"Warmup isn't on for {health.address}. Turn it on in TrulyInbox.",
-        );
-    }
-    min_days: any = warmup.min_days if warmup is not None else 14;
-    days: any = (today or date.today()) - health.started_on if health.started_on else None;
-    days = days.days if days is not None else None;
-    hint: any = "";
+    min_days = warmup.min_days if warmup is not None else 14;
+    days = ((today or date.today()) - health.started_on).days if health.started_on else None;
+    hint = "";
     if health.started_on and warmup is not None and not warmup.start_date {
-        hint = f" Set channels.email.warmup.start_date: {health.started_on.isoformat()} so Sellbird ramps cold email from it.";
+        hint = _TEXT["ti_hint"].format(health.started_on.isoformat());
     }
-    rate: any = health.spam_rate;
+    rate = health.spam_rate;
     if rate is not None and health.sent >= MIN_WARMUP_SAMPLE and rate >= MAX_WARMUP_SPAM {
         return Check(
-            "Warmup service",
+            name,
             FAIL,
-            f"{round(rate * 100)}% spam in warmup over the last 14 days. Keep warming and hold cold email until it's under {round(MAX_WARMUP_SPAM * 100)}%."
-                + hint,
+            _TEXT["ti_spam"].format(round(rate * 100), round(MAX_WARMUP_SPAM * 100)) + hint,
         );
     }
-    inbox: any = f", {round((1 - rate) * 100)}% inbox over the last 14 days"
-        if rate is not None
-        else "";
+    inbox = _TEXT["ti_inbox"].format(round((1 - rate) * 100)) if rate is not None else "";
     if health.sent < MIN_WARMUP_SAMPLE {
-        return Check(
-            "Warmup service",
-            WARN,
-            f"TrulyInbox sent {health.sent} warmup emails in the last 14 days: not enough to judge yet. Check that warmup is running and keep warming before cold email."
-                + hint,
-        );
+        return Check(name, WARN, _TEXT["ti_few"].format(health.sent) + hint);
     }
     if days is None or days < min_days {
-        shown: any = "warming" if days is None else f"day {max(days, 0)} of {min_days}";
+        shown = "warming" if days is None else f"day {max(days, 0)} of {min_days}";
         return Check(
-            "Warmup service",
-            FAIL,
-            f"TrulyInbox: {shown}{inbox}. Keep warming before cold email." + hint,
+            name, FAIL, f"TrulyInbox: {shown}{inbox}. Keep warming before cold email." + hint
         );
     }
-    return Check(
-        "Warmup service",
-        OK,
-        f"TrulyInbox: warmed, day {days}{inbox}. Keep it running alongside Sellbird." + hint,
-    );
+    return Check(name, OK, _TEXT["ti_ok"].format(days, inbox) + hint);
 }
 
-impl check_send_history(total_sent: builtins.int, bounces: builtins.int) -> Check {
+impl check_send_history(total_sent: int, bounces: int) -> Check {
     if total_sent < MIN_SENDS_FOR_RATES {
-        return Check(
-            "Bounce rate",
-            INFO,
-            f"{bounces} bounces / {total_sent} sent - too few sends to judge yet.",
-        );
+        return Check("Bounce rate", INFO, _TEXT["bounce_few"].format(bounces, total_sent));
     }
-    rate: any = bounces / total_sent;
-    status: any = OK if rate <= MAX_BOUNCE_RATE else FAIL;
+    rate = bounces / total_sent;
     return Check(
         "Bounce rate",
-        status,
+        OK if rate <= MAX_BOUNCE_RATE else FAIL,
         f"{rate:.1%} ({bounces}/{total_sent}); keep it under {MAX_BOUNCE_RATE:.0%}.",
     );
 }
