@@ -10,7 +10,6 @@ import tempfile;
 import time;
 import from dataclasses { dataclass }
 import from pathlib { Path, PureWindowsPath }
-import from typing { Callable, Mapping }
 
 glob LABEL = "com.sellbird.tray",
      MARKER = "Created by Sellbird",
@@ -53,13 +52,13 @@ def _why(e: OSError) -> str {
 }
 
 def login_item_path(
-    platform: str | None = None, env: Mapping[str, str] | None = None, home: Path | None = None
+    platform: str | None = None, env: any = None, home: Path | None = None
 ) -> Path {
     platform = sys.platform if platform is None else platform;
     env = os.environ if env is None else env;
     if platform == "darwin" {
         return Path(
-            Path.home() if home is None else home, "Library", "LaunchAgents", f"{LABEL}.plist"
+            Path.home() if home is None else home, "Library/LaunchAgents", f"{LABEL}.plist"
         );
     }
     if platform != "win32" {
@@ -68,15 +67,7 @@ def login_item_path(
     if not env.get("APPDATA") {
         raise LoginItemFailed("APPDATA isn't set, so the Windows Startup folder can't be found.");
     }
-    return Path(
-        env["APPDATA"],
-        "Microsoft",
-        "Windows",
-        "Start Menu",
-        "Programs",
-        "Startup",
-        WINDOWS_SHORTCUT,
-    );
+    return Path(env["APPDATA"], "Microsoft/Windows/Start Menu/Programs/Startup", WINDOWS_SHORTCUT);
 }
 
 def tray_argv(platform: str | None = None, port: int | None = None) -> list[str] {
@@ -90,11 +81,7 @@ def tray_argv(platform: str | None = None, port: int | None = None) -> list[str]
 }
 
 def render_plist(
-    argv: list[str],
-    path_env: str,
-    home_env: str | None,
-    log_path: Path,
-    working_dir: Path | None = None,
+    argv: any, path_env: str, home_env: str | None, log_path: Path, working_dir: Path | None = None
 ) -> bytes {
     data = plistlib.dumps({
         "Label": LABEL,
@@ -151,23 +138,16 @@ def _remove(path: Path) -> LoginItemResult {
     return LoginItemResult(True, path, "Start at login is off.");
 }
 
-def _run_powershell(
-    runner: any, script: str, env: Mapping[str, str], extra: Mapping[str, str]
-) -> any {
+def _run_powershell(runner: any, script: str, env: any, extra: any) -> any {
     sysroot = env.get("SystemRoot") or env.get("SYSTEMROOT") or r"C:\Windows";
     shell = shutil.which("powershell", path=env.get("PATH"))
         or str(PureWindowsPath(sysroot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe"));
-    return runner(
-        [shell, "-NoProfile", "-NonInteractive", "-Command", script],
-        env={**env, **extra},
-        capture_output=True,
-        text=True,
-    );
+    argv = [shell, "-NoProfile", "-NonInteractive", "-Command", script];
+    return runner(argv, env={**env, **extra}, capture_output=True, text=True);
 }
 
-def read_shortcut(
-    path: Path, runner: any = subprocess.run, env: Mapping[str, str] | None = None
-) -> dict[str, str] | None {
+def read_shortcut(path: Path, runner: any = subprocess.run, env: any = None) -> dict[str, str]
+    | None {
     if not Path(path).exists() {
         return None;
     }
@@ -198,9 +178,7 @@ def _user_registry_env(name: str) -> str | None {
     }
 }
 
-def _target(
-    platform: str | None, env: Mapping[str, str] | None, home: Path | None
-) -> tuple[str, Mapping[str, str], Path] {
+def _target(platform: str | None, env: any, home: Path | None) -> tuple[str, any, Path] {
     platform = sys.platform if platform is None else platform;
     env = os.environ if env is None else env;
     return (platform, env, login_item_path(platform, env, home));
@@ -210,21 +188,19 @@ def install(
     *,
     platform: str | None = None,
     runner: any = subprocess.run,
-    env: Mapping[str, str] | None = None,
+    env: any = None,
     home: Path | None = None,
     port: int | None = None,
-    user_env: Callable[[str], str | None] = _user_registry_env,
-    sleep: Callable[[float], None] = time.sleep,
+    user_env: any = _user_registry_env,
+    sleep: any = time.sleep,
 ) -> LoginItemResult {
     (platform, env, path) = _target(platform, env, home);
     if platform == "darwin" {
         home_env = (env.get(HOME_ENV) or "").strip();
+        home_env = str(Path(home_env).expanduser().resolve()) if home_env else None;
         log_path = PROJECT_ROOT / "data" / "tray.log";
         data = render_plist(
-            tray_argv("darwin", port),
-            env.get("PATH", os.defpath),
-            str(Path(home_env).expanduser().resolve()) if home_env else None,
-            log_path,
+            tray_argv("darwin", port), env.get("PATH", os.defpath), home_env, log_path
         );
         if path.exists() {
             current = _read_bytes(path);
@@ -262,20 +238,16 @@ def install(
         }
         if boot.returncode != 0 {
             reason = (boot.stderr or "").strip() or f"exit {boot.returncode}";
-            return LoginItemResult(
-                True,
-                path,
-                f"Saved, but macOS didn't load it ({reason}). It will start at your next login.",
-            );
+            msg = f"Saved, but macOS didn't load it ({reason}). It will start at your next login.";
+            return LoginItemResult(True, path, msg);
         }
         return LoginItemResult(True, path, "Sellbird starts at login, and is starting now.");
     }
     custom = (env.get(HOME_ENV) or "").strip();
-    if custom
-        and not _same_windows_path(
-            custom, str(user_home_default("win32", env, Path.home() if home is None else home))
-        )
-    {
+    std = str(user_home_default("win32", env, Path.home() if home is None else home))
+        if custom
+        else "";
+    if custom and not _same_windows_path(custom, std) {
         registry = user_env(HOME_ENV);
         if not (registry and _same_windows_path(registry.strip(), custom)) {
             raise UnsupportedPlatform(
@@ -295,13 +267,8 @@ def install(
         }
     }
     path.parent.mkdir(parents=True, exist_ok=True);
-    shortcut = {
-        "OL_LNK": str(path),
-        "OL_TARGET": target,
-        "OL_ARGS": arguments,
-        "OL_WORKDIR": str(PROJECT_ROOT),
-        "OL_DESC": MARKER,
-    };
+    shortcut = {"OL_LNK": str(path), "OL_TARGET": target, "OL_ARGS": arguments};
+    shortcut |= {"OL_WORKDIR": str(PROJECT_ROOT), "OL_DESC": MARKER};
     proc = _run_powershell(runner, _CREATE_SCRIPT, env, shortcut);
     if proc.returncode != 0 {
         reason = (proc.stderr or "").strip() or f"exit {proc.returncode}";
