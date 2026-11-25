@@ -153,13 +153,13 @@ graph import {
         load_signature,
         render_html,
     }
-    sellbird.brain --> sellbird.trainer { Brain }
-    sellbird.config --> sellbird.trainer { BrainConfig, load_brain_config }
-    sellbird.public_http --> sellbird.trainer { UnsafeURLError, public_http_client }
-    sellbird.state --> sellbird.trainer { StateManager }
-    sellbird.paths --> sellbird.trainer { PROJECT_ROOT }
-    sellbird.textio --> sellbird.trainer { read_user_text, utf8_stdio }
-    sellbird.untrusted --> sellbird.trainer { UNTRUSTED_RULE, fence }
+    sellbird.brain ++> sellbird.trainer { Brain }
+    sellbird.config ++> sellbird.trainer { BrainConfig, load_brain_config }
+    sellbird.public_http ++> sellbird.trainer { UnsafeURLError, public_http_client }
+    sellbird.state ++> sellbird.trainer { StateManager }
+    sellbird.paths ++> sellbird.trainer { PROJECT_ROOT }
+    sellbird.textio ++> sellbird.trainer { read_user_text, utf8_stdio }
+    sellbird.untrusted ++> sellbird.trainer { UNTRUSTED_RULE, fence }
     sellbird.config ++> sellbird.mailboxes { WarmupConfig, cold_daily_cap }
     sellbird.integrations.mail_provider ++> sellbird.mailboxes {
         MailIdentity,
