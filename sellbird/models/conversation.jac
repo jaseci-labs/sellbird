@@ -5,6 +5,17 @@ import from datetime { datetime }
 
 glob STAGES = "initial_outreach engaged qualifying presenting negotiating closing closed_won closed_lost".split();
 
+def _parse_rows(data: str | None, model: any) -> list[any] {
+    try {
+        rows = json.loads(data) if data else [];
+        return [model.model_validate(r) for r in rows]
+            if all([isinstance(r, dict) for r in rows])
+            else [];
+    } except (json.JSONDecodeError, TypeError) {
+        return [];
+    }
+}
+
 class Message(BaseModel) {
     has sender: str,
         content: str,
@@ -29,14 +40,6 @@ class Conversation(BaseModel) {
 
     @builtins.classmethod
     class def thread_from_json(data: str | None) -> list[Message] {
-        try {
-            rows = json.loads(data) if data else [];
-            if not all(isinstance(row, dict) for row in rows) {
-                return [];
-            }
-            return [Message.model_validate(row) for row in rows];
-        } except (json.JSONDecodeError, TypeError) {
-            return [];
-        }
+        return _parse_rows(data, Message);
     }
 }

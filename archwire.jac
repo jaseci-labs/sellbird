@@ -1310,6 +1310,8 @@ graph import {
     include sellbird.models.prospect ++> sellbird.models { Prospect }
     sellbird.models.company ++> sellbird.models.campaign { _utcnow }
     sellbird.models.company ++> sellbird.models.conversation { _utcnow }
+    sellbird.models.company ++> sellbird.models.prospect { _utcnow }
+    sellbird.models.conversation ++> sellbird.models.campaign { _parse_rows }
     sellbird.brain ++> sellbird.agents.writer { Brain }
     sellbird.config ++> sellbird.agents.writer {
         EmailRulesError,
