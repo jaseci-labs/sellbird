@@ -1,165 +1,80 @@
-"""Extensions: code outside this package that adds to Sellbird without patching it.
-
-An extension is a Python package that declares an entry point in the
-``sellbird.extensions`` group. Its value is a function taking the registry:
-
-    # the extension's pyproject.toml
-    [project.entry-points."sellbird.extensions"]
-    myext = "myext.sellbird_plugin:install"
-
-    # myext/sellbird_plugin.py
-    def install(registry):
-        registry.add_router(router)                     # dashboard routes
-        registry.add_tick_step("myext.sync", sync)      # runs every heartbeat cycle
-        registry.add_cli_command("myext", configure)    # a `sellbird myext` subcommand
-
-Extensions load once per process, on first use, in entry-point name order. A
-failing ``install`` stops Sellbird with the extension's name, rather than
-running with half an extension. An install with no extensions (every
-self-hosted install) loads nothing and behaves exactly as before.
-
-Extensions are trusted code: they run in the same process with the same
-access as Sellbird itself. Install only ones you'd install as a Python package.
-"""
-
 import builtins;
-
-import from __future__ { annotations }
-
 import argparse;
-
 import asyncio;
-
 import logging;
-
 import re;
-
 import from collections.abc { Awaitable, Callable }
-
 import from dataclasses { dataclass, field }
-
 import from importlib.metadata { entry_points }
-
 import from typing { Any }
 
-glob logger: any = logging.getLogger(__name__);
+glob logger = logging.getLogger(__name__),
+     ENTRY_POINT_GROUP = "sellbird.extensions",
+     _NAME = re.compile("^[a-z][a-z0-9_.-]{0,63}$"),
+     TICK_STEP_TIMEOUT_SECONDS = 120.0,
+     TickStep = Callable[["TickContext"], Awaitable[None]],
+     ConfigureCommand = Callable[[argparse.ArgumentParser], Callable[[argparse.Namespace], Any]],
+     _LOADED = False;
 
-glob ENTRY_POINT_GROUP: any = "sellbird.extensions";
+class ExtensionError(RuntimeError) {}
 
-glob _NAME: any = re.compile("^[a-z][a-z0-9_.-]{0,63}$");
+@dataclass(frozen=True)
+class TickContext {
+    has config: any,
+        state: any;
+}
 
-glob TICK_STEP_TIMEOUT_SECONDS: any = 120.0;
-
-glob TickStep: any = Callable[["TickContext"], Awaitable[None]];
-
-glob ConfigureCommand: any = Callable[[argparse.ArgumentParser], Callable[[
-    argparse.Namespace,
-], Any]];
-
-glob _LOADED: any = False;
-
-"""An extension couldn't be installed, or asked for something invalid."""
-obj ExtensionError(RuntimeError) {
-    def __repr__ -> str {
-        return (getattr(builtins.super(ExtensionError, self), "__repr__") as any)();
-    }
-
-    def __eq__(other: any) -> bool {
-        return self is other;
-    }
-
-    def __hash__ -> int {
-        return id(self);
+def _check_name(name: str, what: str) {
+    if not isinstance(name, str) or not _NAME.match(name) {
+        raise ExtensionError(f"{what} name {name!r} must be lowercase letters, digits, . _ or -");
     }
 }
 
-"""What a tick step gets: the cycle's config and state (a StateManager)."""
-@dataclass(frozen=True)
-class TickContext {
-    has config: Any;
-
-    has state: Any;
+def _add(table: any, what: str, name: str, value: any, coroutine: bool = False) {
+    _check_name(name, what);
+    if name in table {
+        raise ExtensionError(f"{what} {name!r} is already registered");
+    }
+    if coroutine and not asyncio.iscoroutinefunction(value) {
+        raise ExtensionError(f"{what} {name!r} must be an async function");
+    }
+    table[name] = value;
 }
 
 @dataclass
 class Registry {
-    has routers: list[Any] = field(default_factory=list[any]);
+    has routers: list[any] = field(default_factory=builtins.list),
+        tick_steps: dict[str, TickStep] = field(default_factory=builtins.dict),
+        cli_commands: dict[str, tuple[str, ConfigureCommand]] = field(
+            default_factory=builtins.dict
+        ),
+        send_rules: dict[str, any] = field(default_factory=builtins.dict),
+        send_headers: dict[str, any] = field(default_factory=builtins.dict),
+        agent_routes: list[tuple[str, str]] = field(default_factory=builtins.list),
+        mcp_tools: dict[str, any] = field(default_factory=builtins.dict),
+        mailbox_connections: dict[str, any] = field(default_factory=builtins.dict);
 
-    has tick_steps: dict[str, TickStep] = field(default_factory=dict[any, any]);
-
-    has cli_commands: dict[str, tuple[str, ConfigureCommand]] = field(
-        default_factory=dict[any, any]
-    );
-
-    has send_rules: dict[str, Any] = field(default_factory=dict[any, any]);
-
-    has send_headers: dict[str, Any] = field(default_factory=dict[any, any]);
-
-    has agent_routes: list[tuple[str, str]] = field(default_factory=list[any]);
-
-    has mcp_tools: dict[str, Any] = field(default_factory=dict[any, any]);
-
-    has mailbox_connections: dict[str, Any] = field(default_factory=dict[any, any]);
-
-    """A FastAPI ``APIRouter`` served by the dashboard, behind its guard,
-        after the built-in routes (an extension can add paths, not replace them)."""
-    def add_router(router) -> None {
+    def add_router(router: any) {
         self.routers.append(router);
     }
 
-    """An async ``step(TickContext)`` run once each heartbeat cycle, after the
-        cycle's own work. A step that fails or runs past the timeout is logged
-        and skipped; it never stops the cycle."""
-    def add_tick_step(name: str, step: TickStep) -> None {
-        _check_name(name, "tick step");
-        if name in self.tick_steps {
-            raise ExtensionError(f"tick step {name!r} is already registered");
-        }
-        if not asyncio.iscoroutinefunction(step) {
-            raise ExtensionError(f"tick step {name!r} must be an async function");
-        }
-        self.tick_steps[name] = step;
+    def add_tick_step(name: str, step: TickStep) {
+        _add(self.tick_steps, "tick step", name, step, coroutine=True);
     }
 
-    """A ``sellbird <name>`` subcommand. ``configure(parser)`` adds its
-        arguments and returns the function that runs it with the parsed args.
-        A name the built-in CLI already uses is refused when the CLI is built."""
-    def add_cli_command(name: str, configure: ConfigureCommand, *, help: str = "") -> None {
-        _check_name(name, "command");
-        if name in self.cli_commands {
-            raise ExtensionError(f"command {name!r} is already registered");
-        }
-        self.cli_commands[name] = (help, configure);
+    def add_cli_command(name: str, configure: ConfigureCommand, *, help: str = "") {
+        _add(self.cli_commands, "command", name, (help, configure));
     }
 
-    """An async ``rule(SendCheck)`` asked before each email, after the
-        built-in checks: return ``send_hooks.Hold`` or ``send_hooks.Cancel``
-        to stop it, None to let it through (sellbird.send_hooks)."""
-    def add_send_rule(name: str, rule) -> None {
-        _check_name(name, "send rule");
-        if name in self.send_rules {
-            raise ExtensionError(f"send rule {name!r} is already registered");
-        }
-        if not asyncio.iscoroutinefunction(rule) {
-            raise ExtensionError(f"send rule {name!r} must be an async function");
-        }
-        self.send_rules[name] = rule;
+    def add_send_rule(name: str, rule: any) {
+        _add(self.send_rules, "send rule", name, rule, coroutine=True);
     }
 
-    """``hook(outbox_item)`` returns extra (header, value) pairs for an email."""
-    def add_send_headers(name: str, hook) -> None {
-        _check_name(name, "header hook");
-        if name in self.send_headers {
-            raise ExtensionError(f"header hook {name!r} is already registered");
-        }
-        self.send_headers[name] = hook;
+    def add_send_headers(name: str, hook: any) {
+        _add(self.send_headers, "header hook", name, hook);
     }
 
-    """Let the coding agent call one of your routes (sellbird.agent_policy).
-        ``pattern`` is a full-match regex on the path. Everything not added is
-        the user's alone."""
-    def add_agent_route(method: str, pattern: str) -> None {
-        import re;
+    def add_agent_route(method: str, pattern: str) {
         if method.upper() not in ("GET", "POST", "PUT", "PATCH", "DELETE") {
             raise ExtensionError(f"agent route method {method!r} isn't an HTTP method");
         }
@@ -171,27 +86,17 @@ class Registry {
         self.agent_routes.append((method.upper(), pattern));
     }
 
-    """``register(server, client_factory, guarded)`` adds tools to the MCP
-        server (sellbird.mcp_server), after the built-in ones."""
-    def add_mcp_tools(name: str, register) -> None {
-        _check_name(name, "MCP tool set");
-        if name in self.mcp_tools {
-            raise ExtensionError(f"MCP tool set {name!r} is already registered");
-        }
-        self.mcp_tools[name] = register;
+    def add_mcp_tools(name: str, register: any) {
+        _add(self.mcp_tools, "MCP tool set", name, register);
     }
 
-    """Another way an inbox can connect (sellbird.mailboxes): mailbox rows
-        whose ``connection`` is this name are sent and read with
-        ``build(row, config=, env=, secrets=)``, a MailProvider or None. The
-        built-in kinds (oauth, smtp) can't be replaced."""
-    def add_mailbox_connection(connection: str, build) -> None {
+    def add_mailbox_connection(connection: str, build: any) {
         import from sellbird.mailboxes { BUILT_IN_CONNECTIONS }
         _check_name(connection, "mailbox connection");
-        if connection in BUILT_IN_CONNECTIONS or connection in self.mailbox_connections {
+        if connection in BUILT_IN_CONNECTIONS {
             raise ExtensionError(f"mailbox connection {connection!r} is already registered");
         }
-        self.mailbox_connections[connection] = build;
+        _add(self.mailbox_connections, "mailbox connection", connection, build);
     }
 }
 
@@ -201,24 +106,17 @@ with entry {
     _REGISTRY = Registry();
 }
 
-def _check_name(name: str, what: str) -> None {
-    if not isinstance(name, `str) or not _NAME.match(name) {
-        raise ExtensionError(f"{what} name {name!r} must be lowercase letters, digits, . _ or -");
-    }
-}
-
-"""The process's registry, with every installed extension loaded."""
 def registry -> Registry {
     load();
     return _REGISTRY;
 }
 
-def load -> None {
+def load {
     if _LOADED {
         return;
     }
     _LOADED = True;
-    for ep in sorted(entry_points(group=ENTRY_POINT_GROUP), key=lambda (e) -> any { e.name }) {
+    for ep in sorted(entry_points(group=ENTRY_POINT_GROUP), key=lambda (e: any) -> any { e.name }) {
         try {
             ep.load()(_REGISTRY);
         } except Exception as e {
@@ -230,18 +128,12 @@ def load -> None {
     }
 }
 
-glob timeout_default_: any;
-
-with entry {
-    timeout_default_ = TICK_STEP_TIMEOUT_SECONDS;
-}
-
-"""Run every registered tick step once, in registration order. Returns
-    ``{name: "ok" | "failed" | "timed out"}``."""
-async def run_tick_steps(config, state, *, timeout: float = timeout_default_) -> dict[str, str] {
+async def run_tick_steps(
+    config: any, state: any, *, timeout: float = TICK_STEP_TIMEOUT_SECONDS
+) -> dict[str, str] {
     results: dict[str, str] = {};
-    context: any = TickContext(config=config, state=state);
-    for (name, step) in `list(registry().tick_steps.items()) {
+    context = TickContext(config=config, state=state);
+    for (name, step) in list(registry().tick_steps.items()) {
         try {
             await asyncio.wait_for(step(context), timeout=timeout);
             results[name] = "ok";
