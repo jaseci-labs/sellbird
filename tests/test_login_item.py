@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pytest
 
+from sellbird import paths
 from sellbird.desktop import login_item as li
 from sellbird.desktop.login_item import (
     LABEL,
@@ -46,7 +47,7 @@ class FakeRunner:
 @pytest.fixture(autouse=True)
 def _project_root(tmp_path, monkeypatch):
     # The log path lives under PROJECT_ROOT/data; never the checkout's data/.
-    monkeypatch.setattr(li, "PROJECT_ROOT", tmp_path / "project")
+    monkeypatch.setattr(paths, "PROJECT_ROOT", tmp_path / "project")
 
 
 def _mac_env(tmp_path, **extra):
@@ -90,7 +91,7 @@ def test_plist_is_valid_and_marked(tmp_path):
     assert parsed["LimitLoadToSessionType"] == "Aqua"
     assert parsed["ProgramArguments"] == ["/py", "-m", "sellbird", "tray"]
     assert parsed["StandardOutPath"] == parsed["StandardErrorPath"] == str(log)
-    assert parsed["WorkingDirectory"] == str(li.PROJECT_ROOT)
+    assert parsed["WorkingDirectory"] == str(paths.PROJECT_ROOT)
     lines = data.decode("utf-8").splitlines()
     doctype = next(i for i, line in enumerate(lines) if line.startswith("<!DOCTYPE"))
     assert lines[doctype + 1] == PLIST_COMMENT
