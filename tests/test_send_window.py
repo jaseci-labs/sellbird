@@ -791,11 +791,11 @@ def _patch_heartbeat(monkeypatch, cfg, state, calls, stop):
     monkeypatch.setattr(main_mod, "Brain", _Brain)
     monkeypatch.setattr(main_mod, "in_quiet_hours", lambda c: True)
     monkeypatch.setattr(main_mod, "_interruptible_sleep", stop_instead_of_sleeping)
-    monkeypatch.setattr(sellbird.agents.scout, "Scout", agent("prospect"))
-    monkeypatch.setattr(sellbird.agents.writer, "Writer", agent("write"))
+    monkeypatch.setattr(main_mod, "Scout", agent("prospect"))
+    monkeypatch.setattr(main_mod, "Writer", agent("write"))
     monkeypatch.setattr(main_mod, "Sender", agent("send"))
     monkeypatch.setattr(main_mod, "Handler", agent("replies"))
-    monkeypatch.setattr(sellbird.agents.analyst, "Analyst", agent("analyze"))
+    monkeypatch.setattr(main_mod, "Analyst", agent("analyze"))
     return main_mod
 
 
