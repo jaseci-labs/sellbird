@@ -1,13 +1,20 @@
 import builtins;
+import http.server;
 import importlib;
+import json;
 import logging;
 import re;
+import threading;
+import urllib.parse;
+import webbrowser;
 import from abc { ABC, abstractmethod }
 import from collections.abc { Callable, Sequence }
 import from dataclasses { dataclass, field }
+import from email.message { EmailMessage }
 import from typing { Protocol }
 
 glob logger: any = logging.getLogger("sellbird.mail"),
+     token_urlsafe: any = importlib.import_module("secrets").token_urlsafe,
      NATIVE_PROVIDERS: any = ("gmail", "smtp", "microsoft"),
      _PROVIDER_CLASSES: dict[str, tuple[str, str]] = {
          "gmail": ("gmail", "GmailProvider"),
@@ -121,3 +128,24 @@ class MailProvider(ABC) {
 }
 
 def get_mail_provider(config: any, env: any) -> MailProvider | None;
+def compose(
+    to_email: str,
+    sender: str,
+    subject: str,
+    body: str,
+    sig: any,
+    headers: any,
+    in_reply_to: str,
+    message_id: str = "",
+) -> EmailMessage;
+def read_token_file(path: any, label: str, log: any) -> builtins.dict | None;
+def write_token_file(path: any, data: builtins.dict);
+def loopback_code(
+    auth_url: str,
+    state: str,
+    signer: str,
+    service: str,
+    servers: list[any],
+    port: int,
+    error_keys: tuple[str, ...],
+) -> builtins.dict | None;

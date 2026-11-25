@@ -75,3 +75,113 @@ impl get_mail_provider(config: any, env: any) -> MailProvider | None {
     (module, cls) = found;
     return getattr(importlib.import_module(f"sellbird.integrations.{module}"), cls)(config, env);
 }
+
+impl compose(
+    to_email: str,
+    sender: str,
+    subject: str,
+    body: str,
+    sig: any,
+    headers: any,
+    in_reply_to: str,
+    message_id: str = "",
+) -> EmailMessage {
+    msg = EmailMessage();
+    msg["To"] = to_email;
+    msg["From"] = sender;
+    msg["Subject"] = subject;
+    for (name, value) in headers {
+        msg[name] = value;
+    }
+    if message_id {
+        msg["Message-ID"] = message_id;
+    }
+    if in_reply_to {
+        msg["In-Reply-To"] = in_reply_to;
+        msg["References"] = in_reply_to;
+    }
+    set_body(msg, body, sig);
+    return msg;
+}
+
+impl read_token_file(path: any, label: str, log: any) -> builtins.dict | None {
+    try {
+        data = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else None;
+        if isinstance(data, builtins.dict) and data.get("refresh_token") {
+            return data;
+        }
+    } except (OSError, json.JSONDecodeError) as e {
+        log.warning(f"Could not read {label} token file: {e}");
+    }
+    return None;
+}
+
+impl write_token_file(path: any, data: builtins.dict) {
+    path.parent.mkdir(parents=True, exist_ok=True);
+    path.write_text(json.dumps(data, indent=2), encoding="utf-8");
+    try {
+        path.chmod(0o600);
+    } except OSError {}
+}
+
+impl loopback_code(
+    auth_url: str,
+    state: str,
+    signer: str,
+    service: str,
+    servers: list[any],
+    port: int,
+    error_keys: tuple[str, ...],
+) -> builtins.dict | None {
+    result: builtins.dict = {};
+    done = threading.Event();
+    page = f"<h2>Sellbird is connected to {service}.</h2>You can close this tab.".encode();
+    class Handler(http.server.BaseHTTPRequestHandler) {
+        def do_GET {
+            query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query);
+            if query.get("state", [""])[0] != state {
+                self.send_response(400);
+                self.end_headers();
+                return;
+            }
+            result["code"] = query.get("code", [""])[0];
+            result["error"] = next((query[k][0] for k in error_keys if query.get(k)), None) or "";
+            self.send_response(200);
+            self.send_header("Content-Type", "text/html");
+            self.end_headers();
+            self.wfile.write(page);
+            done.set();
+        }
+
+        def log_message(*args: any) {}
+    }
+    bound: list[any] = [];
+    for (server_class, host) in servers {
+        try {
+            bound.append(server_class((host, port), Handler));
+        } except OSError {
+            if not bound {
+                raise;
+            }
+        }
+    }
+    for server in bound {
+        threading.Thread(target=server.serve_forever, daemon=True).start();
+    }
+    print(f"\n  Opening browser for {signer} sign-in...\n  {auth_url}\n");
+    webbrowser.open(auth_url);
+    finished = done.wait(timeout=300);
+    for server in bound {
+        server.shutdown();
+        server.server_close();
+    }
+    if not finished {
+        print("  Timed out waiting for the browser round-trip.");
+        return None;
+    }
+    if result.get("error") or not result.get("code") {
+        print(f"  Authorization failed: {result.get('error') or 'no code returned'}");
+        return None;
+    }
+    return result;
+}

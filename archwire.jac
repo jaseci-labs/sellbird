@@ -125,19 +125,20 @@ graph import {
         load_signature,
         set_body,
     }
-    sellbird.integrations.mail_provider --> sellbird.integrations.smtp_mail {
+    sellbird.integrations.mail_provider ++> sellbird.integrations.smtp_mail {
         InboundMessage,
         MailIdentity,
         MailProvider,
         SendResult,
+        compose,
         identity_from_config,
         looks_like_bounce,
     }
-    sellbird.integrations.signature --> sellbird.integrations.smtp_mail {
+    sellbird.integrations.signature ++> sellbird.integrations.smtp_mail {
         SignatureError,
         load_signature,
-        set_body,
     }
+    sellbird.integrations.signature ++> sellbird.integrations.mail_provider { set_body }
     sellbird.paths --> sellbird.integrations.microsoft { PROJECT_ROOT }
     sellbird.workspace_home --> sellbird.integrations.microsoft { current_home }
     sellbird.integrations.mail_provider --> sellbird.integrations.microsoft {
