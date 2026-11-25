@@ -398,8 +398,14 @@ impl load_config(config_path: str | None = None) -> SellbirdConfig {
 }
 
 impl load_brain_config(config_path: str | None = None) -> BrainConfig {
+    if config_path is None {
+        try {
+            config_path = _find_config_file();
+        } except ConfigFileNotFoundError {
+            return BrainConfig();
+        }
+    }
     try {
-        config_path = config_path if config_path is not None else _find_config_file();
         data: any = yaml.safe_load(read_user_text(config_path));
     } except FileNotFoundError {
         return BrainConfig();
