@@ -223,7 +223,7 @@ impl page_lines(html: str) -> list[str] {
 
 impl _sentences(html: str) -> list[str] {
     blocks = "(?i)<(?:/?(?:p|div|li|h[1-6]|section|article|td|tr|blockquote|figcaption|dd|dt)\\b[^>]*|br\\s*/?)>";
-    text = re.sub(blocks, "\n", _strip_code(nfc(html)));
+    text: any = re.sub(blocks, "\n", _strip_code(nfc(html)));
     text = nfc(html_lib.unescape(re.sub("(?s)<[^>]+>", " ", text)).replace("\xa0", " "));
     abbrev = "\\b(Dre?|Mr|Mrs|Ms|Mme|Mlle|Prof|St|Ste|Jr|Sr|Inc|Co|Ltd|Lt[ée]e|[A-Z])\\. ";
     out: list[str] = [];
@@ -530,7 +530,7 @@ impl menu_links(html: str, page_url: str, limit: int = 5) -> list[str] {
         {
             continue;
         }
-        text = html_lib.unescape(re.sub("(?s)<[^>]+>", " ", m.group(2)));
+        text: any = html_lib.unescape(re.sub("(?s)<[^>]+>", " ", m.group(2)));
         text = fold_accents(nfc(re.sub("\\s+", " ", text).strip().lower()));
         path = fold_accents(nfc(unquote(p.path))).lower();
         segments = [re.sub("\\.(?:html?|php|aspx?)$", "", seg) for seg in path.split("/") if seg];

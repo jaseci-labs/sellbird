@@ -98,7 +98,7 @@ files = [
     "sellbird/collectors/ats.jac",
     "sellbird/collectors/discover.jac",
     "sellbird/collectors/people.jac",
-    "sellbird/collectors/profile.py",
+    "sellbird/collectors/profile.jac",
     "sellbird/config.jac",
     "sellbird/dashboard.py",
     "sellbird/dashboard_auth.py",

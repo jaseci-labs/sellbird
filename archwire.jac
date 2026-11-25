@@ -170,26 +170,6 @@ graph import {
     sellbird.secrets ++> sellbird.mailboxes { SecretStore, SecretStoreUnavailable }
     sellbird.state ++> sellbird.mailboxes { StateManager, _new_id, _norm }
     sellbird.workspace_home ++> sellbird.secrets { current_home }
-    sellbird.public_http --> sellbird.collectors.profile { public_http_client }
-    sellbird.startups --> sellbird.collectors.profile { funding_text }
-    sellbird.collectors.ats --> sellbird.collectors.profile {
-        detect_board,
-        matching_roles,
-        read_board,
-        role_keywords,
-    }
-    sellbird.collectors.discover --> sellbird.collectors.profile {
-        name_from_domain,
-        name_matches_domain,
-        site_name_from_html,
-    }
-    sellbird.collectors.people --> sellbird.collectors.profile {
-        drop_quoted,
-        people_from_lines,
-        split_person_name,
-        title_names_other_org,
-    }
-    sellbird.signals --> sellbird.collectors.profile { seed_signal_catalog }
     sellbird.models ++> sellbird.collectors.discover { Company }
     sellbird.collectors.ats ++> sellbird.collectors.discover { role_keywords }
     sellbird.config ++> sellbird.collectors.discover { live_do_not_contact, load_env }
@@ -1627,6 +1607,20 @@ graph import {
     sellbird.untrusted ++> sellbird.agents.handler { UNTRUSTED_RULE, fence }
     sellbird.mailboxes ++> sellbird.agents.handler { load_inboxes }
     sellbird.handoff ++> sellbird.agents.handler { hand_off }
+    sellbird.public_http ++> sellbird.collectors.profile { public_http_client }
+    sellbird.startups ++> sellbird.collectors.profile { funding_text }
+    sellbird.collectors.ats ++> sellbird.collectors.profile {
+        detect_board,
+        matching_roles,
+        read_board,
+        role_keywords,
+    }
+    sellbird.collectors.discover ++> sellbird.collectors.profile {
+        name_from_domain,
+        name_matches_domain,
+        site_name_from_html,
+    }
+    sellbird.signals ++> sellbird.collectors.profile { seed_signal_catalog }
 }
 
 graph spaces {
