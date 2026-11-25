@@ -360,10 +360,8 @@ graph import {
     sellbird.integrations.smtp_mail --> sellbird.inbox_cli { SmtpSettings }
     sellbird.config --> sellbird.inbox_cli { load_config, load_env }
     sellbird.state --> sellbird.inbox_cli { StateManager }
-    sellbird.desktop.login_item --> sellbird.desktop_cli;
-    sellbird.desktop.tray --> sellbird.desktop_cli;
-    sellbird.paths --> sellbird.desktop_cli { PROJECT_ROOT }
-    sellbird.logsafety --> sellbird.desktop_cli { RedactSecrets }
+    sellbird.paths ++> sellbird.desktop_cli { PROJECT_ROOT }
+    sellbird.logsafety ++> sellbird.desktop_cli { RedactSecrets }
     sellbird.paths --> sellbird.desktop.login_item { HOME_ENV, PROJECT_ROOT, user_home_default }
     sellbird.dashboard_instance --> sellbird.desktop.tray;
     sellbird.dashboard_auth --> sellbird.desktop.tray { TokenError, TokenStore }
