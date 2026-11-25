@@ -87,7 +87,7 @@ files = [
     "sellbird/agents/analyst.jac",
     "sellbird/agents/handler.py",
     "sellbird/agents/scout.jac",
-    "sellbird/agents/sender.py",
+    "sellbird/agents/sender.jac",
     "sellbird/agents/writer.jac",
     "sellbird/booking.jac",
     "sellbird/brain.jac",

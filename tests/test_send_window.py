@@ -793,7 +793,7 @@ def _patch_heartbeat(monkeypatch, cfg, state, calls, stop):
     monkeypatch.setattr(main_mod, "_interruptible_sleep", stop_instead_of_sleeping)
     monkeypatch.setattr(sellbird.agents.scout, "Scout", agent("prospect"))
     monkeypatch.setattr(sellbird.agents.writer, "Writer", agent("write"))
-    monkeypatch.setattr(sender_mod, "Sender", agent("send"))
+    monkeypatch.setattr(main_mod, "Sender", agent("send"))
     monkeypatch.setattr(sellbird.agents.handler, "Handler", agent("replies"))
     monkeypatch.setattr(sellbird.agents.analyst, "Analyst", agent("analyze"))
     return main_mod
@@ -834,7 +834,7 @@ def _patch_heartbeat_real_sender(monkeypatch, cfg, state, calls, stop, provider)
     """The heartbeat with the real Sender on a FakeProvider; other agents stubbed."""
     real_sender = sender_mod.Sender
     main_mod = _patch_heartbeat(monkeypatch, cfg, state, calls, stop)
-    monkeypatch.setattr(sender_mod, "Sender", real_sender)
+    monkeypatch.setattr(main_mod, "Sender", real_sender)
     monkeypatch.setattr(sender_mod, "get_mail_provider", lambda c, e: provider)
     monkeypatch.setattr(sender_mod, "SEND_JITTER_SECONDS", (0, 0))
     monkeypatch.setattr(main_mod, "load_env", lambda: SimpleNamespace(instantly_api_key=""))

@@ -249,67 +249,6 @@ graph import {
     sellbird.startups ++> sellbird.agents.writer { startup_facts }
     sellbird.untrusted ++> sellbird.agents.writer { UNTRUSTED_RULE, fence }
     sellbird.workspace_home ++> sellbird.agents.writer { current_home }
-    sellbird.brain --> sellbird.agents.sender { Brain }
-    sellbird.config --> sellbird.agents.sender {
-        EnvConfig,
-        SellbirdConfig,
-        cold_daily_cap,
-        compliance_footer_lines,
-        compliance_notice,
-        compliance_of,
-        live_do_not_contact,
-        operator_timezone,
-        send_window_of,
-    }
-    sellbird.extensions --> sellbird.agents.sender;
-    sellbird.gate --> sellbird.agents.sender {
-        autopilot_review,
-        do_not_contact_match,
-        pre_send_check,
-    }
-    sellbird.send_hooks --> sellbird.agents.sender {
-        NO_HEADERS_HOLD,
-        SendCheck,
-        SendHookError,
-        extra_headers,
-        first_verdict,
-    }
-    sellbird.send_window --> sellbird.agents.sender {
-        in_window,
-        next_send_time,
-        recipient_country,
-        recipient_zone,
-    }
-    sellbird.integrations.instantly --> sellbird.agents.sender { InstantlyClient }
-    sellbird.integrations.mail_provider --> sellbird.agents.sender {
-        NATIVE_PROVIDERS,
-        get_mail_provider,
-    }
-    sellbird.integrations.precleared --> sellbird.agents.sender {
-        PreclearedClient,
-        UNKNOWN_ATTEMPTS,
-        UNKNOWN_RETRY_AFTER,
-        clear_hold,
-        record_hold,
-    }
-    sellbird.integrations.signature --> sellbird.agents.sender { signature_problem }
-    sellbird.email_style --> sellbird.agents.sender { style_problems }
-    sellbird.mailboxes --> sellbird.agents.sender { Inboxes, load_inboxes }
-    sellbird.sending_mode --> sellbird.agents.sender { SIGNATURE_HOLD_PREFIX, sync_sending_mode }
-    sellbird.state --> sellbird.agents.sender {
-        AUTOPILOT_OFF_REASON,
-        COLLEAGUE_REPLIED,
-        HAND_SENT_REASON,
-        HELD_FOR_REVIEW,
-        MANUAL_SEND_KEY,
-        MAYBE_SENT_PREFIX,
-        MOVED_BACK_PREFIXES,
-        RECHECK_PREFIX,
-        StateManager,
-        UNKNOWN_HOLD_PREFIX,
-    }
-    sellbird.storage --> sellbird.agents.sender;
-    sellbird.models.conversation --> sellbird.agents.sender { Message }
     sellbird.booking --> sellbird.agents.handler { booking_instruction }
     sellbird.brain --> sellbird.agents.handler { Brain, BrainUnavailable }
     sellbird.config --> sellbird.agents.handler {
@@ -837,7 +776,6 @@ graph import {
         with_sign_off,
     }
     sellbird.agents.writer --> tests.test_email_style { Writer, offer_block }
-    sellbird.agents.sender --> tests.test_email_style;
     sellbird.agents.sender --> tests.test_email_style { Sender }
     sellbird.state --> tests.test_email_style { HELD_FOR_REVIEW }
     sellbird.brain --> tests.test_email_style { Brain }
@@ -1637,6 +1575,64 @@ graph import {
         nfc,
         ProfileCollector,
     }
+    sellbird.config ++> sellbird.agents.sender {
+        cold_daily_cap,
+        compliance_footer_lines,
+        compliance_notice,
+        compliance_of,
+        live_do_not_contact,
+        operator_timezone,
+        send_window_of,
+    }
+    sellbird.extensions as extensions ++> sellbird.agents.sender;
+    sellbird.gate ++> sellbird.agents.sender {
+        autopilot_review,
+        do_not_contact_match,
+        pre_send_check,
+    }
+    sellbird.send_hooks ++> sellbird.agents.sender {
+        NO_HEADERS_HOLD,
+        SendCheck,
+        SendHookError,
+        extra_headers,
+        first_verdict,
+    }
+    sellbird.send_window ++> sellbird.agents.sender {
+        in_window,
+        next_send_time,
+        recipient_country,
+        recipient_zone,
+    }
+    sellbird.integrations.instantly ++> sellbird.agents.sender { InstantlyClient }
+    sellbird.integrations.mail_provider ++> sellbird.agents.sender {
+        NATIVE_PROVIDERS,
+        get_mail_provider,
+    }
+    sellbird.integrations.precleared ++> sellbird.agents.sender {
+        UNKNOWN_ATTEMPTS,
+        UNKNOWN_RETRY_AFTER,
+        PreclearedClient,
+        clear_hold,
+        record_hold,
+    }
+    sellbird.integrations.signature ++> sellbird.agents.sender { signature_problem }
+    sellbird.email_style ++> sellbird.agents.sender { style_problems }
+    sellbird.mailboxes ++> sellbird.agents.sender { load_inboxes }
+    sellbird.sending_mode ++> sellbird.agents.sender { SIGNATURE_HOLD_PREFIX, sync_sending_mode }
+    sellbird.state ++> sellbird.agents.sender {
+        AUTOPILOT_OFF_REASON,
+        COLLEAGUE_REPLIED,
+        HAND_SENT_REASON,
+        HELD_FOR_REVIEW,
+        MANUAL_SEND_KEY,
+        MAYBE_SENT_PREFIX,
+        MOVED_BACK_PREFIXES,
+        RECHECK_PREFIX,
+        UNKNOWN_HOLD_PREFIX,
+    }
+    sellbird.models.conversation ++> sellbird.agents.sender { Message }
+    sellbird.storage as storage ++> sellbird.agents.sender;
+    sellbird.agents.sender --> tests.test_email_style;
 }
 
 graph spaces {
