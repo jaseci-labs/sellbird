@@ -152,7 +152,7 @@ files = [
     "sellbird/send_hooks.jac",
     "sellbird/send_window.jac",
     "sellbird/sending_mode.jac",
-    "sellbird/setup.py",
+    "sellbird/setup.jac",
     "sellbird/signals.jac",
     "sellbird/site_facts.jac",
     "sellbird/startups.jac",

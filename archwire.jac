@@ -60,25 +60,16 @@ graph import {
     sellbird.desktop_cli --> sellbird.cli;
     sellbird.extensions --> sellbird.cli;
     sellbird.home --> sellbird.cli;
-    sellbird.brain --> sellbird.setup { Brain }
-    sellbird.config --> sellbird.setup { BrainConfig, COUNTRY_ALIASES, normalize_prospect_country }
-    sellbird.integrations.precleared --> sellbird.setup {
+    sellbird.brain ++> sellbird.setup { Brain }
+    sellbird.config ++> sellbird.setup { BrainConfig, COUNTRY_ALIASES, normalize_prospect_country }
+    sellbird.integrations.precleared ++> sellbird.setup {
         GET_KEY_URL,
         SENDER_COUNTRIES,
         create_free_key,
     }
-    sellbird.state --> sellbird.setup { StateManager }
-    sellbird.paths --> sellbird.setup { PROJECT_ROOT }
-    sellbird.textio --> sellbird.setup { read_user_text, utf8_stdio }
-    sellbird.codex --> sellbird.setup {
-        CODEX_INSTALL_HINT,
-        CodexError,
-        SUGGESTED_MODEL,
-        check_cli_version,
-        check_native_auth,
-        require_supported_platform,
-    }
-    sellbird.trainer --> sellbird.setup { Trainer, brain_section }
+    sellbird.state ++> sellbird.setup { StateManager }
+    sellbird.paths ++> sellbird.setup { PROJECT_ROOT }
+    sellbird.textio ++> sellbird.setup { read_user_text, utf8_stdio }
     sellbird.models.company ++> sellbird.state { Company }
     sellbird.models.prospect ++> sellbird.state { Prospect }
     sellbird.models.campaign ++> sellbird.state { Campaign }
