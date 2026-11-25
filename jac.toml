@@ -130,7 +130,7 @@ files = [
     "sellbird/integrations/signature.jac",
     "sellbird/integrations/smtp_mail.jac",
     "sellbird/integrations/tech_detect.jac",
-    "sellbird/integrations/trulyinbox.py",
+    "sellbird/integrations/trulyinbox.jac",
     "sellbird/legacy.jac",
     "sellbird/logsafety.jac",
     "sellbird/mailboxes.py",
