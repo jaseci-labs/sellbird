@@ -146,7 +146,7 @@ files = [
     "sellbird/paths.jac",
     "sellbird/pidfile.jac",
     "sellbird/pipeline.jac",
-    "sellbird/public_http.py",
+    "sellbird/public_http.jac",
     "sellbird/register.py",
     "sellbird/secrets.jac",
     "sellbird/send_hooks.jac",
