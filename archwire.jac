@@ -3,63 +3,6 @@ graph layers {
 }
 
 graph import {
-    sellbird.paths --> sellbird.cli { PACKAGE_ROOT, PROJECT_ROOT, is_checkout }
-    sellbird.setup --> sellbird.cli { _read_env_file, run_setup }
-    sellbird.main --> sellbird.cli { main, unusable_backlog_notice }
-    sellbird.trainer --> sellbird.cli { Trainer }
-    sellbird.config --> sellbird.cli {
-        BrainConfig,
-        ConfigError,
-        compliance_notice,
-        load_brain_config,
-        load_config,
-        load_env,
-        sending_notice,
-    }
-    sellbird.mcp_install --> sellbird.cli;
-    sellbird.mcp_server --> sellbird.cli { run_stdio }
-    sellbird.dashboard --> sellbird.cli {
-        DashboardSetupError,
-        _write_env_file,
-        dashboard_url,
-        start_dashboard,
-    }
-    sellbird.dashboard_auth --> sellbird.cli { TokenError }
-    sellbird.state --> sellbird.cli { DB_PATH, StateManager }
-    sellbird.agents.writer --> sellbird.cli { EMAIL_RULES_PROBLEM_KEY, MAX_WRITE_ATTEMPTS }
-    sellbird.sending_mode --> sellbird.cli { held_message }
-    sellbird.integrations.precleared --> sellbird.cli {
-        GET_KEY_URL,
-        create_free_key,
-        current_hold,
-        hold_message,
-    }
-    sellbird.brain --> sellbird.cli { BRAIN_STATUS_KEY, Brain, active_brain_status }
-    sellbird.codex --> sellbird.cli { CodexClient, CodexQuotaClient }
-    sellbird.integrations.quota --> sellbird.cli { QuotaClient }
-    sellbird.register --> sellbird.cli { build_register, sqlite_query, to_csv }
-    sellbird.export --> sellbird.cli { export_prospects_csv }
-    sellbird.integrations.gmail --> sellbird.cli { GmailProvider, run_auth_flow }
-    sellbird.integrations.microsoft --> sellbird.cli { MicrosoftProvider, run_auth_flow }
-    sellbird.pipeline --> sellbird.cli { run_profile_stage, run_prospecting }
-    sellbird.collectors.discover --> sellbird.cli {
-        PROVIDERS,
-        build_queries,
-        preset_problem,
-        provider_menu,
-        run_discovery,
-    }
-    sellbird.signals --> sellbird.cli { seed_signal_catalog }
-    sellbird.deliverability --> sellbird.cli;
-    sellbird.agents.handler --> sellbird.cli { BOUNCE_COUNT_KEY }
-    sellbird.integrations.trulyinbox --> sellbird.cli;
-    sellbird --> sellbird.cli;
-    sellbird.legacy --> sellbird.cli { migrate_files }
-    sellbird.textio --> sellbird.cli { utf8_stdio }
-    sellbird.inbox_cli --> sellbird.cli { register }
-    sellbird.desktop_cli --> sellbird.cli;
-    sellbird.extensions --> sellbird.cli;
-    sellbird.home --> sellbird.cli;
     sellbird.config --> sellbird.integrations.precleared {
         PRECLEARED_SENDER_COUNTRIES,
         normalize_prospect_country,
