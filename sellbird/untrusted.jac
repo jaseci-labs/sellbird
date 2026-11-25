@@ -26,4 +26,10 @@ glob _ZERO_WIDTH_RE: any = re.compile("[​-‏⁠﻿]");
 """``text`` as an <untrusted> block it can't break out of. Fullwidth
     lookalikes ("＜/untrusted＞") are folded and hidden characters dropped
     first, so a tag can't hide from the check."""
-def fence(text, source: builtins.str) -> builtins.str;
+def fence(text, source: builtins.str) -> builtins.str {
+    import unicodedata;
+    clean: any = _ZERO_WIDTH_RE.sub("", unicodedata.normalize("NFKC", `str(text or "")));
+    clean = _TAG_RE.sub("[tag removed]", clean);
+    label: any = re.sub("[^\\w ,.-]", "", source)[:40];
+    return f"<untrusted source=\"{label}\">\n{clean}\n</untrusted>";
+}

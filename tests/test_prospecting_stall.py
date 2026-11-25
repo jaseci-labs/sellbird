@@ -288,12 +288,12 @@ def _instantly_with_a_draft_and_an_open_conversation(monkeypatch, state, calls, 
     cfg = SellbirdConfig(**BASE, channels={"email": {"provider": "instantly", "require_approval": False}})
     main_mod = _patch_heartbeat(monkeypatch, cfg, state, calls, stop)
     monkeypatch.setattr(main_mod, "in_quiet_hours", lambda c: False)
-    monkeypatch.setattr(main_mod.Sender, "is_native", False)
+    monkeypatch.setattr(sender_mod.Sender, "is_native", False)
 
     async def read(self):
         calls.append("replies")
         return read_ok
-    monkeypatch.setattr(main_mod.Handler, "run", read)
+    monkeypatch.setattr(handler_mod.Handler, "run", read)
     return main_mod
 
 

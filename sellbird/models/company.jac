@@ -7,7 +7,9 @@ import from datetime { datetime, timezone }
 import from pydantic { BaseModel, Field, field_validator }
 
 """Naive UTC now (consistent with DB storage; avoids deprecated utcnow)."""
-def _utcnow -> datetime;
+def _utcnow -> datetime {
+    return datetime.now(timezone.utc).replace(tzinfo=None);
+}
 
 class Company(BaseModel) {
     has id: builtins.str = "";
@@ -47,5 +49,7 @@ class Company(BaseModel) {
     """Domains are dedup keys — normalize case/whitespace."""
     @field_validator("domain")
     @builtins.classmethod
-    class def _normalize_domain(v: builtins.str) -> builtins.str;
+    class def _normalize_domain(v: builtins.str) -> builtins.str {
+        return (v or "").strip().lower();
+    }
 }

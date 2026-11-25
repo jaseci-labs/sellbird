@@ -99,18 +99,62 @@ class Cancel {
 
 """A hook returned something that can't be sent."""
 obj SendHookError(ValueError) {
-    def __repr__ -> str;
+    def __repr__ -> str {
+        return (getattr(builtins.super(SendHookError, self), "__repr__") as any)();
+    }
 
-    def __eq__(other: any) -> bool;
+    def __eq__(other: any) -> bool {
+        return self is other;
+    }
 
-    def __hash__ -> int;
+    def __hash__ -> int {
+        return id(self);
+    }
 }
 
 """The first rule that holds or cancels, as (status, error) for the outbox,
     or None when every rule lets it through. A rule that raises holds the email:
     an extension's bug must never be what lets an email out."""
-async def first_verdict(rules: dict[str, SendRule], check: SendCheck) -> tuple[str, str] | None;
+async def first_verdict(rules: dict[str, SendRule], check: SendCheck) -> tuple[str, str] | None {
+    for (name, rule) in rules.items() {
+        try {
+            verdict: any = await rule(check);
+        } except Exception as e {
+            logger.error(f"Send rule {name!r} failed; holding the email: {e}", exc_info=True);
+            return ("approved", f"held: {name} couldn't check it");
+        }
+        if verdict is None {
+            continue;
+        }
+        if isinstance(verdict, Cancel) {
+            return ("cancelled", f"{name}: {verdict.reason}"[:300]);
+        }
+        if isinstance(verdict, Hold) {
+            return ("approved", f"held: {name}: {verdict.reason}"[:300]);
+        }
+        logger.error(f"Send rule {name!r} returned {verdict!r}; holding the email.");
+        return ("approved", f"held: {name} gave no clear answer");
+    }
+    return None;
+}
 
 """Every hook's headers for this email, checked. Raises SendHookError on a
     reserved or malformed header, so the email is held rather than sent wrong."""
-def extra_headers(hooks: dict[str, HeaderHook], item: dict) -> list[tuple[str, str]];
+def extra_headers(hooks: dict[str, HeaderHook], item: dict) -> list[tuple[str, str]] {
+    out: list[tuple[str, str]] = [];
+    for (name, hook) in hooks.items() {
+        header: any;
+        value: any;
+        for (header, value) in hook(item) or () {
+            (header, value) = (`str(header), `str(value));
+            if not _HEADER_NAME.match(header) or header.lower() in RESERVED_HEADERS {
+                raise SendHookError(f"{name} added a header Sellbird can't send: {header!r}");
+            }
+            if "\r" in value or "\n" in value {
+                raise SendHookError(f"{name} added a header value with a line break: {header}");
+            }
+            out.append((header, value));
+        }
+    }
+    return out;
+}

@@ -175,3 +175,6 @@ files = [
 
 [wheel.".".metadata]
 License-File = ["LICENSE", "NOTICE"]
+
+[check.lint]
+select = ["style", "strip-comments", "strip-docstrings"]

@@ -440,7 +440,7 @@ class _OneHit(DiscoveryProvider):
 async def test_a_careers_subdomain_hit_is_recorded_as_the_company(state, monkeypatch):
     from sellbird.collectors import discover as D
     monkeypatch.setitem(D.PROVIDERS, "fake", _OneHit("careers.acme.com"))
-    monkeypatch.setattr("sellbird.collectors.discover.load_env", lambda: SimpleNamespace(model_dump=lambda: {}),
+    monkeypatch.setattr("sellbird.config.load_env", lambda: SimpleNamespace(model_dump=lambda: {}),
                         raising=False)
     await seed_signal_catalog(state)
     await state.set_signal_status("FOUND_IN_SERP", "confirmed")
@@ -597,7 +597,7 @@ def test_the_hiring_preset_needs_roles():
 async def test_hiring_preset_hits_on_ats_hosts_are_never_prospects(state, monkeypatch, domain):
     from sellbird.collectors import discover as D
     monkeypatch.setitem(D.PROVIDERS, "fake", _OneHit(domain))
-    monkeypatch.setattr("sellbird.collectors.discover.load_env", lambda: SimpleNamespace(model_dump=lambda: {}),
+    monkeypatch.setattr("sellbird.config.load_env", lambda: SimpleNamespace(model_dump=lambda: {}),
                         raising=False)
     await seed_signal_catalog(state)
     await state.set_signal_status("FOUND_IN_SERP", "confirmed")

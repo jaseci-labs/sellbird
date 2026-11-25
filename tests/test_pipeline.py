@@ -118,7 +118,7 @@ def chain(monkeypatch):
                     collector="profile", value_text="wordpress")
             return len(companies), "run-x"
 
-        monkeypatch.setattr("sellbird.pipeline.profile_companies",
+        monkeypatch.setattr("sellbird.collectors.profile.profile_companies",
                             fake_profile)
         return seen
 
@@ -194,7 +194,7 @@ async def test_a_failing_profile_stage_does_not_lose_the_discovery(
 
     async def boom(state, companies, **_):
         raise RuntimeError("network gone")
-    monkeypatch.setattr("sellbird.pipeline.profile_companies", boom)
+    monkeypatch.setattr("sellbird.collectors.profile.profile_companies", boom)
 
     report = await P.run_prospecting(state, config, "fake",
                                      [D.DiscoveryQuery(term="roofer")])

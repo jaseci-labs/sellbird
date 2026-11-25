@@ -11,7 +11,9 @@ import from pydantic { BaseModel, Field, field_validator }
 glob COMPANY_INBOX_SOURCE: any = "company_inbox";
 
 """Naive UTC now (consistent with DB storage; avoids deprecated utcnow)."""
-def _utcnow -> datetime;
+def _utcnow -> datetime {
+    return datetime.now(timezone.utc).replace(tzinfo=None);
+}
 
 class Prospect(BaseModel) {
     has id: builtins.str = "";
@@ -65,11 +67,15 @@ class Prospect(BaseModel) {
     """Emails are dedup keys — normalize so 'Jane@X.com' == 'jane@x.com'."""
     @field_validator("email")
     @builtins.classmethod
-    class def _normalize_email(v: builtins.str) -> builtins.str;
+    class def _normalize_email(v: builtins.str) -> builtins.str {
+        return (v or "").strip().lower();
+    }
 
     @field_validator("linkedin_url")
     @builtins.classmethod
-    class def _strip_linkedin(v: builtins.str) -> builtins.str;
+    class def _strip_linkedin(v: builtins.str) -> builtins.str {
+        return (v or "").strip();
+    }
 
     """A company's published general address (info@, office@) with no named person."""
     has is_company_inbox: builtins.bool {
@@ -78,8 +84,19 @@ class Prospect(BaseModel) {
         }
     }
 
-    def full_name -> builtins.str;
+    def full_name -> builtins.str {
+        name: any = f"{self.first_name} {self.last_name}".strip();
+        if not name and self.is_company_inbox {
+            return f"{self.company} team" if self.company else "the team";
+        }
+        return name;
+    }
 
     """A contact must have a name and title — or be a company inbox with an address."""
-    def is_valid -> builtins.bool;
+    def is_valid -> builtins.bool {
+        if self.is_company_inbox {
+            return `bool(self.email and self.title);
+        }
+        return `bool(self.first_name and self.last_name and self.title);
+    }
 }

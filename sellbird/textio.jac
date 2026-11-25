@@ -22,12 +22,33 @@ glob logger: any = logging.getLogger("sellbird.textio");
     page. Line endings come back as 
 , as text-mode reads give them.
     Raises what reading the file raises (FileNotFoundError...)."""
-def read_user_text(path) -> builtins.str;
+def read_user_text(path) -> builtins.str {
+    data: any = Path(path).read_bytes();
+    try {
+        return _newlines(data.decode("utf-8-sig"));
+    } except UnicodeDecodeError {
+        encoding: any = locale.getencoding();
+        logger.warning(
+            f"{path} isn't saved as UTF-8; read it as {encoding}. Re-save it as UTF-8 to keep characters like ★ or — intact.",
+        );
+        return _newlines(data.decode(encoding, errors="replace"));
+    }
+}
 
-def _newlines(text: builtins.str) -> builtins.str;
+def _newlines(text: builtins.str) -> builtins.str {
+    return text.replace("\r\n", "\n").replace("\r", "\n");
+}
 
 """Write output as UTF-8. On Windows, output going to a file or pipe (the
     dashboard's log of `sellbird run`) uses the locale code page, where "⚠" or
     "→" in a message would crash print(). stderr keeps backslash escapes, so
     odd bytes stay diagnosable."""
-def utf8_stdio(*streams_) -> any;
+def utf8_stdio(*streams_) -> any {
+    streams: any = tuple(streams_);
+    for stream in streams or (sys.stdout, sys.stderr) {
+        errors: any = "backslashreplace" if stream is sys.stderr else "replace";
+        try {
+            stream.reconfigure(encoding="utf-8", errors=errors);
+        } except (AttributeError, ValueError, OSError) {}
+    }
+}
