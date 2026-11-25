@@ -16,18 +16,6 @@ impl CodexError.init(
     self.retryable = retryable;
 }
 
-impl CodexError.__repr__ -> str {
-    return (getattr(builtins.super(CodexError, self), "__repr__") as any)();
-}
-
-impl CodexError.__eq__(other: any) -> bool {
-    return self is other;
-}
-
-impl CodexError.__hash__ -> int {
-    return id(self);
-}
-
 impl _setup_error(message: builtins.str) -> any {
     return CodexError(message, kind="setup");
 }
@@ -834,18 +822,6 @@ impl _AppServer._child_kwargs -> builtins.dict {
     };
 }
 
-impl _AppServer.__repr__ -> str {
-    return (getattr(builtins.object, "__repr__") as any)(self);
-}
-
-impl _AppServer.__eq__(other: any) -> bool {
-    return self is other;
-}
-
-impl _AppServer.__hash__ -> int {
-    return id(self);
-}
-
 impl _kill_tree(proc) -> any {
     try {
         os.killpg(proc.pid, signal.SIGKILL);
@@ -1001,18 +977,6 @@ impl CodexClient._take_message(turn: _Turn, item: builtins.dict) -> any {
     }
 }
 
-impl CodexClient.__repr__ -> str {
-    return (getattr(builtins.object, "__repr__") as any)(self);
-}
-
-impl CodexClient.__eq__(other: any) -> bool {
-    return self is other;
-}
-
-impl CodexClient.__hash__ -> int {
-    return id(self);
-}
-
 impl CodexQuotaClient.init(client: any) {
     self.client = client;
     self._cache = None;
@@ -1023,18 +987,6 @@ impl CodexQuotaClient.init(client: any) {
 
 impl CodexQuotaClient.invalidate -> any {
     self._cache_at = 0.0;
-}
-
-impl CodexQuotaClient.__repr__ -> str {
-    return (getattr(builtins.object, "__repr__") as any)(self);
-}
-
-impl CodexQuotaClient.__eq__(other: any) -> bool {
-    return self is other;
-}
-
-impl CodexQuotaClient.__hash__ -> int {
-    return id(self);
 }
 
 impl _AppServer._spawn(*args_, **kwargs) -> any {
