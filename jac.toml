@@ -170,7 +170,7 @@ files = [
     "sellbird/web/fonts/newsreader.woff2",
     "sellbird/web/index.html",
     "sellbird/web/sellbird-mark.svg",
-    "sellbird/workspace_home.py",
+    "sellbird/workspace_home.jac",
 ]
 
 [wheel.".".metadata]

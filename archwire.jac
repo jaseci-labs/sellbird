@@ -88,8 +88,6 @@ graph import {
     sellbird.storage as storage ++> sellbird.state;
     sellbird.storage ++> sellbird.state { BUSY_TIMEOUT_SECONDS }
     sellbird.workspace_home ++> sellbird.state { _HOME }
-    sellbird.paths --> sellbird.workspace_home;
-    sellbird.state --> sellbird.workspace_home;
     sellbird.usage ++> sellbird.integrations.quota { claude_config_dir }
     sellbird.config --> sellbird.integrations.precleared {
         PRECLEARED_SENDER_COUNTRIES,
