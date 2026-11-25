@@ -28,45 +28,43 @@ glob API_BASE: str = "https://lynx-api.trulyinbox.com",
      NO_ANSWER: str = "TrulyInbox didn't answer. Try again in a minute.",
      UNREADABLE: str = "TrulyInbox sent a reply Sellbird couldn't read.",
      _WARM: set[str] = set("active warming enabled running".split()),
-     _LOGIN_FAILED: any = tuple(
-         "auth_error auth_expired auth_failed suspended_auth blocked disconnect".split()
-     ),
+     _LOGIN_FAILED = "auth_error auth_expired auth_failed suspended_auth blocked disconnect".split(),
      _REJECTED: set[str] = set(),
+     _CLIENT: dict[str, any] = {"base_url": API_BASE, "timeout": TIMEOUT},
      _STATUS_FIELDS: any = tuple("status accountState statusBucket warmupPausedReason".split()),
-     _RULES: any = (
-         (set("150006 Api.TooManyFailedAttempts too_many_requests".split()), None, LOCKED_OUT),
-         (
-             set("150001 150002 invalid_api_key unauthorized Api.InvalidKey".split()),
-             401,
-             KEY_REJECTED,
-         ),
-         (set("150003 insufficient_scope Api.ScopeForbidden".split()), None, MISSING_SCOPE),
-         (set("150007 api_access_not_in_plan".split()), None, NO_API_PLAN),
-         (set("040006 subscription_paused".split()), None, PAUSED),
-         (set("150004 workspace_forbidden Api.WorkspaceForbidden".split()), None, WRONG_WORKSPACE),
-         (set("150005 rate_limit_exceeded Api.RateLimitExceeded".split()), 429, RATE_LIMITED),
+     _RULES: any = tuple(
+         (set(codes.split()), status, message)
+         for (codes, status, message) in [
+             ("150006 Api.TooManyFailedAttempts too_many_requests", None, LOCKED_OUT),
+             ("150001 150002 invalid_api_key unauthorized Api.InvalidKey", 401, KEY_REJECTED),
+             ("150003 insufficient_scope Api.ScopeForbidden", None, MISSING_SCOPE),
+             ("150007 api_access_not_in_plan", None, NO_API_PLAN),
+             ("040006 subscription_paused", None, PAUSED),
+             ("150004 workspace_forbidden Api.WorkspaceForbidden", None, WRONG_WORKSPACE),
+             ("150005 rate_limit_exceeded Api.RateLimitExceeded", 429, RATE_LIMITED),
+         ],
      ),
      _hash: any = lambda (key: str) -> str {
-         return hashlib.sha256(key.encode("utf-8")).hexdigest()[:16];
+         return hashlib.sha256(key.encode()).hexdigest()[:16];
      },
      forget_rejected: any = lambda (key: str) { _REJECTED.discard(_hash(key)); },
-     _dict: any = lambda (x: any) -> builtins.dict {
-         return x if isinstance(x, builtins.dict) else {};
-     },
-     _list: any = lambda (x: any) -> builtins.list {
-         return x if isinstance(x, builtins.list) else [];
-     },
+     _dict: any = lambda (x: any) -> any { return x if isinstance(x, builtins.dict) else {}; },
+     _list: any = lambda (x: any) -> any { return x if isinstance(x, builtins.list) else []; },
      _str: any = lambda (x: any) -> str { return x if isinstance(x, str) else ""; };
 
 class TrulyInboxError(RuntimeError) {}
 
+def _num(x: any) -> bool {
+    return isinstance(x, float) and math.isfinite(x)
+        or (isinstance(x, builtins.int) and not isinstance(x, bool));
+}
+
 def _int(x: any) -> int {
-    if isinstance(x, bool)
-        or not (isinstance(x, builtins.int) or (isinstance(x, float) and math.isfinite(x)))
-    {
-        return 0;
-    }
-    return max(0, builtins.int(x));
+    return max(0, builtins.int(x)) if _num(x) else 0;
+}
+
+def _with_ids(x: any) -> list[any] {
+    return [w for w in _list(x) if isinstance(w, builtins.dict) and str(w.get("id", "")).isdigit()];
 }
 
 def _code(x: any) -> str {
@@ -133,9 +131,7 @@ class TrulyInbox {
         }
         auth = {"Authorization": f"Bearer {self._key}"};
         try {
-            async with httpx.AsyncClient(
-                base_url=API_BASE, transport=self._transport, timeout=TIMEOUT
-            ) as client {
+            async with httpx.AsyncClient(transport=self._transport, **_CLIENT) as client {
                 resp = await client.get(path, params=params, headers=auth);
             }
         } except httpx.HTTPError {
@@ -174,12 +170,7 @@ class TrulyInbox {
 
     async def _workspace -> str {
         if not self.workspace_id {
-            listed = _list(await self._get("/v2/workspaces"));
-            spaces = [
-                w
-                for w in listed
-                if isinstance(w, builtins.dict) and str(w.get("id", "")).isdigit()
-            ];
+            spaces = _with_ids(await self._get("/v2/workspaces"));
             if not spaces {
                 raise TrulyInboxError(NO_WORKSPACE);
             }
@@ -192,12 +183,9 @@ class TrulyInbox {
         address = address.strip();
         base = f"/v2/workspaces/{await self._workspace()}";
         accounts = await self._get(f"{base}/accounts", {"q": address, "limit": FIND_LIMIT});
+        want = address.lower();
         hit = next(
-            (a
-            for a in _list(accounts)
-            if isinstance(a, builtins.dict)
-                and _str(a.get("emailAddress")).strip().lower() == address.lower()
-                and str(a.get("id", "")).isdigit()),
+            (a for a in _with_ids(accounts) if _str(a.get("emailAddress")).strip().lower() == want),
             None,
         );
         if hit is None {
@@ -220,11 +208,7 @@ class TrulyInbox {
             started_on=_day(status.get("warmupStartDate")),
             sent=sum([_int(x.get("sent")) for x in days]),
             spam=sum([_int(x.get("spamDetected")) for x in days]),
-            score=float(score)
-                if isinstance(score, (builtins.int, float))
-                    and not isinstance(score, bool)
-                    and math.isfinite(score)
-                else None,
+            score=float(score) if _num(score) else None,
         );
     }
 }
@@ -247,17 +231,13 @@ async def set_choice(state: any, choice: str) {
 }
 
 def sending_address(config: any) -> str {
-    smtp_user = os.getenv("SMTP_USERNAME", "").strip()
-        if config.channels.email.provider == "smtp"
-        else "";
+    smtp = config.channels.email.provider == "smtp";
+    smtp_user = os.getenv("SMTP_USERNAME", "").strip() if smtp else "";
     return smtp_user if "@" in smtp_user else config.persona.email;
 }
 
 def key_from_env -> tuple[str, str] {
-    return (
-        os.getenv("TRULYINBOX_API_KEY", "").strip(),
-        os.getenv("TRULYINBOX_WORKSPACE_ID", "").strip(),
-    );
+    return tuple(os.getenv(f"TRULYINBOX_{k}", "").strip() for k in ("API_KEY", "WORKSPACE_ID"));
 }
 
 def describe_status(health: MailboxHealth | None, error: str, choice: str) -> str {
