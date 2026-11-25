@@ -91,7 +91,7 @@ async def test_hunter_backfill_spends_no_credit_on_a_listed_company(monkeypatch)
 
     import sellbird.agents.scout as scout_mod
     import sellbird.integrations.email_finder as ef
-    monkeypatch.setattr(ef, "hunter_domain_people", people)
+    monkeypatch.setattr(scout_mod, "hunter_domain_people", people)
     monkeypatch.setattr(ef, "_hunter_monthly_cap", lambda: 25)
     # One domain a cycle by default; two here so the pass reaches the
     # company after the listed one.

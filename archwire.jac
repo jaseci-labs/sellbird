@@ -201,17 +201,17 @@ graph import {
     sellbird.config ++> sellbird.collectors.discover { live_do_not_contact, load_env }
     sellbird.gate ++> sellbird.collectors.discover { do_not_contact_domain_match }
     sellbird.signals ++> sellbird.collectors.discover { seed_signal_catalog }
-    sellbird.brain --> sellbird.agents.scout { Brain }
-    sellbird.collectors.people --> sellbird.agents.scout;
-    sellbird.collectors.discover --> sellbird.agents.scout { site_name_from_html }
-    sellbird.collectors.profile --> sellbird.agents.scout {
+    sellbird.brain ++> sellbird.agents.scout { Brain }
+    sellbird.collectors.people as people_mod ++> sellbird.agents.scout;
+    sellbird.collectors.discover ++> sellbird.agents.scout { site_name_from_html }
+    sellbird.collectors.profile ++> sellbird.agents.scout {
         _reads_like_title,
         fold_accents,
         looks_like_challenge,
     }
-    sellbird.config --> sellbird.agents.scout { EnvConfig, SellbirdConfig, live_do_not_contact }
-    sellbird.gate --> sellbird.agents.scout { do_not_contact_domain_match }
-    sellbird.integrations.email_finder --> sellbird.agents.scout {
+    sellbird.config ++> sellbird.agents.scout { EnvConfig, SellbirdConfig, live_do_not_contact }
+    sellbird.gate ++> sellbird.agents.scout { do_not_contact_domain_match }
+    sellbird.integrations.email_finder ++> sellbird.agents.scout {
         DEFAULT_PATTERN,
         SMALL_BUSINESS_PATTERN,
         find_email,
@@ -221,14 +221,14 @@ graph import {
         site_email_evidence,
         verify_published_address,
     }
-    sellbird.integrations.linkedin --> sellbird.agents.scout { LinkedInAutomation }
-    sellbird.models.company --> sellbird.agents.scout { Company }
-    sellbird.models.prospect --> sellbird.agents.scout { COMPANY_INBOX_SOURCE, Prospect }
-    sellbird.public_http --> sellbird.agents.scout { public_http_client }
-    sellbird.state --> sellbird.agents.scout { StateManager }
-    sellbird.untrusted --> sellbird.agents.scout { UNTRUSTED_RULE, fence }
-    sellbird.integrations.tech_detect --> sellbird.agents.scout { detect_tech }
-    sellbird.collectors.ats --> sellbird.agents.scout { role_keywords }
+    sellbird.integrations.linkedin ++> sellbird.agents.scout { LinkedInAutomation }
+    sellbird.models.company ++> sellbird.agents.scout { Company }
+    sellbird.models.prospect ++> sellbird.agents.scout { COMPANY_INBOX_SOURCE, Prospect }
+    sellbird.public_http ++> sellbird.agents.scout { public_http_client }
+    sellbird.state ++> sellbird.agents.scout { StateManager }
+    sellbird.untrusted ++> sellbird.agents.scout { UNTRUSTED_RULE, fence }
+    sellbird.integrations.tech_detect ++> sellbird.agents.scout { detect_tech }
+    sellbird.collectors.ats ++> sellbird.agents.scout { role_keywords }
     sellbird.paths --> sellbird.integrations.linkedin { PROJECT_ROOT }
     sellbird.brain ++> sellbird.agents.writer { Brain }
     sellbird.config ++> sellbird.agents.writer {
