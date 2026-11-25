@@ -1,94 +1,46 @@
-impl HunterUnavailable.__repr__ -> str {
-    return (getattr(builtins.super(HunterUnavailable, self), "__repr__") as any)();
+impl _clean_domain(domain: str) -> str {
+    domain = re.sub("^https?://", "", (domain or "").strip().lower()).split("/")[0].split("?")[0];
+    return domain[4:] if domain.startswith("www.") else domain;
 }
 
-impl HunterUnavailable.__eq__(other: any) -> bool {
-    return self is other;
-}
-
-impl HunterUnavailable.__hash__ -> int {
-    return id(self);
-}
-
-impl _clean_domain(domain: builtins.str) -> builtins.str {
-    domain = (domain or "").strip().lower();
-    domain = re.sub("^https?://", "", domain);
-    domain = domain.split("/")[0].split("?")[0];
-    if domain.startswith("www.") {
-        domain = domain[4:];
-    }
-    return domain;
-}
-
-impl _clean_name_part(value: builtins.str) -> builtins.str {
+impl _clean_name_part(value: str) -> str {
     return re.sub("[^a-z]", "", (value or "").lower());
 }
 
-impl build_email(
-    pattern: builtins.str, first: builtins.str, last: builtins.str, domain: builtins.str
-) -> builtins.str {
-    first = _clean_name_part(first);
-    last = _clean_name_part(last);
-    domain = _clean_domain(domain);
-    if not first or not last or not domain {
+impl _name(first: str, last: str) -> tuple[str, str] {
+    return (_clean_name_part(first), _clean_name_part(last));
+}
+
+impl build_email(pattern: str, first: str, last: str, domain: str) -> str {
+    ((first, last), domain) = (_name(first, last), _clean_domain(domain));
+    if not first or not last or not domain or pattern not in PATTERNS {
         return "";
     }
-    builder: any = PATTERN_BUILDERS.get(pattern);
-    if not builder {
-        return "";
-    }
-    try {
-        local: any = builder(first, last);
-    } except IndexError {
-        return "";
-    }
+    local = pattern.format(f=first, l=last, fi=first[0]);
     return f"{local}@{domain}" if local else "";
 }
 
-impl generate_patterns(
-    first_name: builtins.str, last_name: builtins.str, domain: builtins.str
-) -> builtins.list[builtins.str] {
-    out: any = [];
-    for pattern in PATTERN_BUILDERS {
-        email: any = build_email(pattern, first_name, last_name, domain);
-        if email {
-            out.append(email);
-        }
+impl generate_patterns(first_name: str, last_name: str, domain: str) -> list[str] {
+    out: list[str] = [];
+    for pattern in PATTERNS {
+        out.append(build_email(pattern, first_name, last_name, domain));
     }
-    return `list(dict.fromkeys(out));
+    return `list(`dict.fromkeys(e for e in out if e));
 }
 
-impl classify_mx(mx_host: builtins.str) -> builtins.str {
-    h: any;
-    if not mx_host {
+impl classify_mx(mx_host: str) -> str {
+    h = (mx_host or "").lower();
+    if not h {
         return "none";
-    }
-    h = mx_host.lower();
-    if "google" in h or "googlemail" in h or "aspmx.l" in h {
+    } elif "google" in h or "googlemail" in h or "aspmx.l" in h {
         return "google";
-    }
-    if "outlook" in h or "protection.outlook" in h or "microsoft" in h {
+    } elif "outlook" in h or "protection.outlook" in h or "microsoft" in h {
         return "microsoft";
     }
-    if `any(
-        g in h
-        for g in (
-            "pphosted",
-            "mimecast",
-            "barracuda",
-            "proofpoint",
-            "messagelabs",
-            "cisco",
-            "fortinet",
-            "trendmicro",
-        ),
-    ) {
-        return "gateway";
-    }
-    return "other";
+    return "gateway" if `any(g in h for g in GATEWAYS) else "other";
 }
 
-impl get_mx_host(domain: builtins.str) -> Optional[builtins.str] {
+impl get_mx_host(domain: str) -> str | None {
     domain = _clean_domain(domain);
     if not domain {
         return None;
@@ -97,180 +49,155 @@ impl get_mx_host(domain: builtins.str) -> Optional[builtins.str] {
         return _mx_cache[domain];
     }
     try {
-        loop: any = asyncio.get_event_loop();
-        answers: any = await loop.run_in_executor(
+        answers = await asyncio.get_event_loop().run_in_executor(
             None, lambda -> any { dns.resolver.resolve(domain, "MX") }
         );
-        records: any = sorted(answers, key=lambda (x) -> any { x.preference });
-        mx_host: any = `str(records[0].exchange).rstrip(".") if records else None;
-        _mx_cache[domain] = mx_host or None;
-        return _mx_cache[domain];
+        records = sorted(answers, key=lambda (x: any) -> any { x.preference });
+        _mx_cache[domain] = (`str(records[0].exchange).rstrip(".") if records else None) or None;
     } except Exception as e {
         logger.debug(f"MX lookup failed for {domain}: {e}");
         _mx_cache[domain] = None;
-        return None;
     }
+    return _mx_cache[domain];
 }
 
-impl infer_pattern_from_email(
-    email: builtins.str, first: builtins.str, last: builtins.str
-) -> Optional[builtins.str] {
+impl infer_pattern_from_email(email: str, first: str, last: str) -> str | None {
     email = (email or "").strip().lower();
-    if "@" not in email {
+    (first, last) = _name(first, last);
+    if "@" not in email or not first or not last {
         return None;
     }
-    local: any = email.split("@", 1)[0];
-    first = _clean_name_part(first);
-    last = _clean_name_part(last);
-    if not first or not last {
-        return None;
-    }
-    for (pattern, builder) in PATTERN_BUILDERS.items() {
-        try {
-            if builder(first, last) == local {
-                return pattern;
-            }
-        } except IndexError {
-            continue;
+    local = email.split("@", 1)[0];
+    for pattern in PATTERNS {
+        if pattern.format(f=first, l=last, fi=first[0]) == local {
+            return pattern;
         }
     }
     return None;
 }
 
-impl pattern_from_local(
-    local: builtins.str
-) -> Optional[builtins.tuple[builtins.str, builtins.float]] {
+impl pattern_from_local(local: str) -> tuple[str, float] | None {
     local = (local or "").strip().lower();
     if not local or local in ROLE_LOCALS or `any(ch.isdigit() for ch in local) {
         return None;
     }
-    m: any = re.fullmatch("([a-z]+)([._-])([a-z]+)", local);
-    if m {
-        first: any;
-        sep: any;
-        last: any;
-        (first, sep, last) = m.groups() as any;
-        if sep == "." and len(first) == 1 and len(last) >= 2 {
-            return ("{fi}.{l}", 0.6);
-        }
-        if len(first) >= 2
-            and len(last) >= 2
-            and first not in ROLE_LOCALS
-            and last not in ROLE_LOCALS
-        {
-            return ({".": "{f}.{l}", "_": "{f}_{l}", "-": "{f}-{l}"}[sep], 0.6);
-        }
+    m = re.fullmatch("([a-z]+)([._-])([a-z]+)", local);
+    if not m {
         return None;
+    }
+    (first, sep, last) = m.groups();
+    if sep == "." and len(first) == 1 and len(last) >= 2 {
+        return ("{fi}.{l}", 0.6);
+    }
+    if len(first) >= 2 and len(last) >= 2 and first not in ROLE_LOCALS and last not in ROLE_LOCALS {
+        return ("{f}" + sep + "{l}", 0.6);
     }
     return None;
 }
 
-impl _disambiguate(
-    local: builtins.str, people
-) -> Optional[builtins.tuple[builtins.str, builtins.float]] {
+impl _disambiguate(local: str, people: any) -> tuple[str, float] | None {
     if not re.fullmatch("[a-z]{3,20}", local or "") {
         return None;
     }
-    lasts: any = {_clean_name_part(last) for (_, last) in people or []} - {""};
-    firsts: any = {_clean_name_part(first) for (first, _) in people or []} - {""};
+    lasts = {_clean_name_part(last) for (_, last) in people or []} - {""};
+    firsts = {_clean_name_part(first) for (first, _) in people or []} - {""};
     if local in firsts {
         return ("{f}", 0.6);
     }
-    if `any(operator.ge(len(last), 3) and operator.eq(local[1:], last) for last in lasts) {
+    if `any(len(last) >= 3 and local[1:] == last for last in lasts) {
         return ("{fi}{l}", 0.6);
     }
-    if local in lasts {
-        return ("{l}", 0.55);
-    }
-    return None;
+    return ("{l}", 0.55) if local in lasts else None;
 }
 
 impl site_email_evidence(
-    addresses: builtins.list[builtins.str],
-    people: builtins.list[builtins.tuple[builtins.str, builtins.str]],
-    domain: builtins.str,
-) -> builtins.tuple[builtins.list[builtins.tuple[builtins.str, builtins.str, builtins.str]], builtins.str, builtins.float] {
+    addresses: list[str], people: list[tuple[str, str]], domain: str
+) -> tuple[list[tuple[str, str, str]], str, float] {
     domain = _clean_domain(domain);
-    known: builtins.list[builtins.tuple[builtins.str, builtins.str, builtins.str]] = [];
-    tied_votes: builtins.dict[builtins.str, builtins.int] = {};
-    loose_votes: builtins.dict[builtins.str, builtins.int] = {};
-    addr: any;
+    known: list[tuple[str, str, str]] = [];
+    tied: any = Counter();
+    loose: any = Counter();
     for addr in addresses or [] {
         addr = (addr or "").strip().lower();
-        local: any;
-        _: any;
-        adomain: any;
-        (local, _, adomain) = addr.partition("@") as any;
+        (local, _, adomain) = addr.partition("@");
         if adomain != domain or local in ROLE_LOCALS {
             continue;
         }
-        owners: any = [];
-        first: any;
-        last: any;
+        owners: list[tuple[str, str, str]] = [];
         for (first, last) in people or [] {
-            pattern: any = infer_pattern_from_email(addr, first, last);
+            pattern = infer_pattern_from_email(addr, first, last);
             if pattern {
                 owners.append((first, last, pattern));
             }
         }
         if len(owners) == 1 {
-            (first, last, pattern) = owners[0] as any;
-            known.append((addr, first, last));
-            tied_votes[pattern] = tied_votes.get(pattern, 0) + 1;
-            continue;
-        }
-        if owners {
-            patterns: any = {o[2] for o in owners};
-            if len(patterns) == 1 {
-                loose_votes[owners[0][2]] = loose_votes.get(owners[0][2], 0) + 2;
+            known.append((addr, owners[0][0], owners[0][1]));
+            tied[owners[0][2]] += 1;
+        } elif owners and len({o[2] for o in owners}) == 1 {
+            loose[owners[0][2]] += 2;
+        } elif not owners {
+            guess = pattern_from_local(local) or _disambiguate(local, people);
+            if guess {
+                loose[guess[0]] += 1;
             }
-            continue;
-        }
-        guess: any = pattern_from_local(local) or _disambiguate(local, people);
-        if guess {
-            loose_votes[guess[0]] = loose_votes.get(guess[0], 0) + 1;
         }
     }
-    if tied_votes {
-        pattern = max(tied_votes, key=tied_votes.get);
-        return (known, pattern, 0.95 if tied_votes[pattern] >= 2 else 0.9);
+    if tied {
+        (pattern, n) = tied.most_common(1)[0];
+        return (known, pattern, 0.95 if n >= 2 else 0.9);
     }
-    if loose_votes {
-        pattern = max(loose_votes, key=loose_votes.get);
-        n: any = loose_votes[pattern];
+    if loose {
+        (pattern, n) = loose.most_common(1)[0];
         return (known, pattern, min(0.55 + 0.05 * n, 0.7));
     }
     return (known, "", 0.0);
 }
 
-impl _hunter_headers(api_key: builtins.str) -> builtins.dict {
+impl _hunter_headers(api_key: str) -> dict[str, str] {
     return {"X-API-KEY": api_key};
 }
 
-impl _redact(error, api_key: builtins.str) -> builtins.str {
-    text: any = `str(error);
-    if api_key {
-        text = text.replace(api_key, "***");
-    }
-    return text;
+impl _redact(error: any, api_key: str) -> str {
+    return `str(error).replace(api_key, "***") if api_key else `str(error);
 }
 
-impl _hunter_domain_pattern(
-    domain: builtins.str, api_key: builtins.str
-) -> Optional[builtins.tuple[builtins.str, builtins.float]] {
+impl _request(
+    url: str, params: dict[str, any], api_key: str, failed: str, hunter: bool = False
+) -> any {
+    extra = {"headers": _hunter_headers(api_key)} if hunter else {};
     try {
-        client: any;
         async with httpx.AsyncClient(timeout=API_TIMEOUT) as client {
-            resp: any = await client.get(
-                "https://api.hunter.io/v2/domain-search",
-                params={"domain": domain, "limit": 1},
-                headers=_hunter_headers(api_key),
-            );
+            return await client.get(url, params=params, **extra);
         }
     } except httpx.HTTPError as e {
-        logger.debug(f"Hunter domain-search failed for {domain}: {_redact(e, api_key)}");
+        logger.debug(f"{failed}: {_redact(e, api_key)}");
         raise HunterUnavailable(_redact(e, api_key)) from e;
     }
+}
+
+impl _fetch_json(
+    url: str, params: dict[str, any], api_key: str, failed: str, hunter: bool = False
+) -> tuple[bool, any] {
+    try {
+        resp = await _request(url, params, api_key, failed, hunter);
+    } except HunterUnavailable {
+        return (False, None);
+    }
+    try {
+        return (True, resp.json()) if resp.status_code == 200 else (False, None);
+    } except ValueError {
+        return (False, None);
+    }
+}
+
+impl _hunter_domain_pattern(domain: str, api_key: str) -> tuple[str, float] | None {
+    resp = await _request(
+        HUNTER_SEARCH,
+        {"domain": domain, "limit": 1},
+        api_key,
+        f"Hunter domain-search failed for {domain}",
+        True,
+    );
     if resp.status_code == 429 or resp.status_code >= 500 {
         raise HunterUnavailable(f"HTTP {resp.status_code}");
     }
@@ -278,68 +205,44 @@ impl _hunter_domain_pattern(
         return None;
     }
     try {
-        data: any = (resp.json() or {}).get("data") or {};
+        data = (resp.json() or {}).get("data") or {};
     } except ValueError {
         raise HunterUnavailable("bad JSON");
     }
-
-    hunter_pattern: any = data.get("pattern") or "";
-    translated: any = _translate_hunter_pattern(hunter_pattern);
-    if translated {
-        n: any = len(data.get("emails") or []);
-        confidence: any = min(0.7 + 0.05 * n, 0.95);
-        return (translated, confidence);
-    }
-    return None;
+    translated = _translate_hunter_pattern(data.get("pattern") or "");
+    return (translated, min(0.7 + 0.05 * len(data.get("emails") or []), 0.95))
+        if translated
+        else None;
 }
 
-impl _translate_hunter_pattern(hunter_pattern: builtins.str) -> Optional[builtins.str] {
-    if not hunter_pattern {
-        return None;
-    }
-    p: any = hunter_pattern.lower().strip();
-    mapping: any = {
-        "{first}.{last}": "{f}.{l}",
-        "{first}{last}": "{f}{l}",
-        "{f}{last}": "{fi}{l}",
-        "{first}": "{f}",
-        "{f}.{last}": "{fi}.{l}",
-        "{first}_{last}": "{f}_{l}",
-        "{last}": "{l}",
-        "{last}.{first}": "{l}.{f}",
-        "{first}-{last}": "{f}-{l}",
-        "{last}{f}": "{l}{fi}",
-    };
-    return mapping.get(p);
+impl _translate_hunter_pattern(hunter_pattern: str) -> str | None {
+    return _HUNTER_PATTERNS.get(hunter_pattern.lower().strip()) if hunter_pattern else None;
 }
 
-impl _hunter_api_key -> builtins.str {
+impl _hunter_api_key -> str {
     return os.getenv("HUNTER_API_KEY", "").strip();
 }
 
-impl _hunter_monthly_cap -> builtins.int {
-    raw: any = os.getenv("HUNTER_MONTHLY_SEARCHES", "").strip();
-    if not raw {
-        return HUNTER_FREE_MONTHLY_SEARCHES;
-    }
+impl _hunter_monthly_cap -> int {
+    raw = os.getenv("HUNTER_MONTHLY_SEARCHES", "").strip();
     try {
-        return max(`int(raw), 0);
+        return max(int(raw), 0) if raw else HUNTER_FREE_MONTHLY_SEARCHES;
     } except ValueError {
         return HUNTER_FREE_MONTHLY_SEARCHES;
     }
 }
 
-impl _hunter_usage_key -> builtins.str {
+impl _hunter_usage_key -> str {
     return f"hunter_domain_search_count:{datetime.now(timezone.utc):%Y-%m}";
 }
 
-impl hunter_searches_remaining(state) -> builtins.int {
-    cap: any = _hunter_monthly_cap();
+impl hunter_searches_remaining(state: any) -> int {
+    cap = _hunter_monthly_cap();
     if state is None {
         return cap;
     }
     try {
-        used: any = `int(await state.get_setting(_hunter_usage_key(), "0") or "0");
+        used = int(await state.get_setting(_hunter_usage_key(), "0") or "0");
     } except (ValueError, TypeError) {
         used = 0;
     } except Exception as e {
@@ -349,7 +252,7 @@ impl hunter_searches_remaining(state) -> builtins.int {
     return max(cap - used, 0);
 }
 
-impl record_hunter_search(state) -> None {
+impl record_hunter_search(state: any) {
     if state is None {
         return;
     }
@@ -360,50 +263,34 @@ impl record_hunter_search(state) -> None {
     }
 }
 
-impl hunter_domain_people(
-    domain: builtins.str, api_key: builtins.str, limit: builtins.int = 10
-) -> Optional[builtins.list[builtins.dict]] {
-    try {
-        client: any;
-        async with httpx.AsyncClient(timeout=API_TIMEOUT) as client {
-            resp: any = await client.get(
-                "https://api.hunter.io/v2/domain-search",
-                params={"domain": domain, "limit": limit},
-                headers=_hunter_headers(api_key),
-            );
-        }
-    } except httpx.HTTPError as e {
-        logger.debug(f"Hunter domain-search failed for {domain}: {_redact(e, api_key)}");
-        return None;
-    }
-    if resp.status_code != 200 {
-        return None;
-    }
-    try {
-        data: any = (resp.json() or {}).get("data") or {};
-    } except ValueError {
-        return None;
-    }
-    emails: any = data.get("emails");
+impl hunter_domain_people(domain: str, api_key: str, limit: int = 10) -> list[dict[str, any]]
+    | None {
+    (ok, body) = await _fetch_json(
+        HUNTER_SEARCH,
+        {"domain": domain, "limit": limit},
+        api_key,
+        f"Hunter domain-search failed for {domain}",
+        True,
+    );
+    emails = ((body or {}).get("data") or {}).get("emails") if ok else None;
     return emails if isinstance(emails, `list) else None;
 }
 
 impl derive_pattern(
-    domain: builtins.str,
-    known_emails: Optional[builtins.list[builtins.tuple[builtins.str, builtins.str, builtins.str]]] = None,
-    state=None,
-    default_pattern: builtins.str = default_pattern_default_,
-) -> builtins.tuple[builtins.str, builtins.str, builtins.float] {
+    domain: str,
+    known_emails: list[tuple[str, str, str]] | None = None,
+    state: any = None,
+    default_pattern: str = DEFAULT_PATTERN,
+) -> tuple[str, str, float] {
     domain = _clean_domain(domain);
     for (email, first, last) in known_emails or [] {
-        if email.split("@")[-1].lower() == domain {
-            inferred: any = infer_pattern_from_email(email, first, last);
-            if inferred {
-                return (inferred, "known_email", 0.9);
-            }
+        inferred = infer_pattern_from_email(email, first, last)
+            if email.split("@")[-1].lower() == domain
+            else None;
+        if inferred {
+            return (inferred, "known_email", 0.9);
         }
     }
-
     cached: any = None;
     if state is not None {
         try {
@@ -412,159 +299,105 @@ impl derive_pattern(
             logger.debug(f"Pattern cache read failed for {domain}: {e}");
         }
     }
-    source: any = (cached or {}).get("source") or "";
-    if cached and cached.get("pattern") and source not in WEAK_SOURCES {
+    source = (cached or {}).get("source") or "";
+    has_pattern = cached and cached.get("pattern");
+    if has_pattern and source not in WEAK_SOURCES {
         return (cached["pattern"], source or "cache", cached.get("confidence", 0.6));
     }
-    site_guess: any = cached
-        if cached and cached.get("pattern") and source.startswith("site_address_guess")
-        else None;
-    hunter_tried: any = source.endswith("_after_hunter");
-    key: any = _hunter_api_key();
+    site_guess = has_pattern and source.startswith("site_address_guess");
+    hunter_tried = source.endswith("_after_hunter");
+    key = _hunter_api_key();
     if key and not hunter_tried and await hunter_searches_remaining(state) > 0 {
         await record_hunter_search(state);
         try {
-            result: any = await _hunter_domain_pattern(domain, key);
-            answered: any = True;
-        } except HunterUnavailable as e {
-            logger.debug(f"Hunter unavailable for {domain}: {e}");
-            (result, answered) = (None, False);
-        }
-        if result {
-            return (result[0], "hunter_domain_search", result[1]);
-        }
-        if answered {
+            result = await _hunter_domain_pattern(domain, key);
+            if result {
+                return (result[0], "hunter_domain_search", result[1]);
+            }
             if site_guess {
                 return (
-                    site_guess["pattern"],
+                    cached["pattern"],
                     "site_address_guess_after_hunter",
-                    site_guess.get("confidence", 0.6),
+                    cached.get("confidence", 0.6),
                 );
             }
             return (default_pattern, "default_after_hunter", 0.3);
+        } except HunterUnavailable as e {
+            logger.debug(f"Hunter unavailable for {domain}: {e}");
         }
     }
-
     if site_guess {
-        return (site_guess["pattern"], source, site_guess.get("confidence", 0.6));
+        return (cached["pattern"], source, cached.get("confidence", 0.6));
     }
     return (default_pattern, source if hunter_tried else "default", 0.3);
 }
 
-impl verify_reoon(email: builtins.str, api_key: builtins.str) -> Optional[builtins.dict] {
-    try {
-        client: any;
-        async with httpx.AsyncClient(timeout=API_TIMEOUT) as client {
-            resp: any = await client.get(
-                "https://emailverifier.reoon.com/api/v1/verify",
-                params={"email": email, "key": api_key, "mode": "power"},
-            );
-        }
-    } except httpx.HTTPError as e {
-        logger.debug(f"Reoon request failed for {email}: {_redact(e, api_key)}");
+impl verify_reoon(email: str, api_key: str) -> dict[str, any] | None {
+    (ok, data) = await _fetch_json(
+        "https://emailverifier.reoon.com/api/v1/verify",
+        {"email": email, "key": api_key, "mode": "power"},
+        api_key,
+        f"Reoon request failed for {email}",
+    );
+    if not ok or not isinstance(data, `dict) {
         return None;
     }
-    if resp.status_code != 200 {
-        return None;
-    }
-    try {
-        data: any = resp.json();
-    } except ValueError {
-        return None;
-    }
-    if not isinstance(data, `dict) {
-        return None;
-    }
-    status: any = `str(data.get("status") or "").lower();
+    status = `str(data.get("status") or "").lower();
     if status == "role_account" {
         status = "valid" if data.get("is_deliverable") is True else "unknown";
     }
-    is_catch_all: any = `bool(data.get("is_catch_all") or operator.eq(status, "catch_all"));
-    return {"status": status, "catch_all": is_catch_all};
-}
-
-impl verify_zerobounce(email: builtins.str, api_key: builtins.str) -> Optional[builtins.dict] {
-    try {
-        client: any;
-        async with httpx.AsyncClient(timeout=API_TIMEOUT) as client {
-            resp: any = await client.get(
-                "https://api.zerobounce.net/v2/validate",
-                params={"email": email, "api_key": api_key},
-            );
-        }
-    } except httpx.HTTPError as e {
-        logger.debug(f"ZeroBounce request failed for {email}: {_redact(e, api_key)}");
-        return None;
-    }
-    if resp.status_code != 200 {
-        return None;
-    }
-    try {
-        data: any = resp.json();
-    } except ValueError {
-        return None;
-    }
-    if not isinstance(data, `dict) {
-        return None;
-    }
-    status: any = `str(data.get("status") or "").lower();
-    sub: any = `str(data.get("sub_status") or "").lower();
     return {
         "status": status,
-        "catch_all": operator.eq(sub, "catch-all") or operator.eq(status, "catch-all"),
+        "catch_all": `bool(data.get("is_catch_all") or status == "catch_all"),
     };
 }
 
-impl verify_hunter(email: builtins.str, api_key: builtins.str) -> Optional[builtins.dict] {
-    try {
-        client: any;
-        async with httpx.AsyncClient(timeout=API_TIMEOUT) as client {
-            resp: any = await client.get(
-                "https://api.hunter.io/v2/email-verifier",
-                params={"email": email},
-                headers=_hunter_headers(api_key),
-            );
-        }
-    } except httpx.HTTPError as e {
-        logger.debug(f"Hunter verify failed for {email}: {_redact(e, api_key)}");
+impl verify_zerobounce(email: str, api_key: str) -> dict[str, any] | None {
+    (ok, data) = await _fetch_json(
+        "https://api.zerobounce.net/v2/validate",
+        {"email": email, "api_key": api_key},
+        api_key,
+        f"ZeroBounce request failed for {email}",
+    );
+    if not ok or not isinstance(data, `dict) {
         return None;
     }
-    if resp.status_code != 200 {
+    status = `str(data.get("status") or "").lower();
+    sub = `str(data.get("sub_status") or "").lower();
+    return {"status": status, "catch_all": sub == "catch-all" or status == "catch-all"};
+}
+
+impl verify_hunter(email: str, api_key: str) -> dict[str, any] | None {
+    (ok, body) = await _fetch_json(
+        "https://api.hunter.io/v2/email-verifier",
+        {"email": email},
+        api_key,
+        f"Hunter verify failed for {email}",
+        True,
+    );
+    if not ok {
         return None;
     }
-    try {
-        data: any = (resp.json() or {}).get("data") or {};
-    } except ValueError {
-        return None;
-    }
-    status: any = `str(data.get("status") or data.get("result") or "").lower();
+    data = (body or {}).get("data") or {};
+    status = `str(data.get("status") or data.get("result") or "").lower();
     return {"status": status, "catch_all": `bool(data.get("accept_all"))};
 }
 
-impl verify_email_smtp(email: builtins.str) -> Optional[builtins.bool] {
+impl verify_email_smtp(email: str) -> bool | None {
     if "@" not in email {
         return False;
     }
-    domain: any = email.rsplit("@", 1)[1];
-    mx_host: any = await get_mx_host(domain);
+    mx_host = await get_mx_host(email.rsplit("@", 1)[1]);
     if not mx_host {
         return None;
     }
-    smtp: any = aiosmtplib.SMTP(hostname=mx_host, port=25, timeout=10);
+    smtp = aiosmtplib.SMTP(hostname=mx_host, port=25, timeout=10);
     try {
         await smtp.connect();
         await smtp.ehlo();
         await smtp.mail("verify@example.com");
-        code: any;
-        _: any;
-        (code, _) = await smtp.rcpt(email) as any;
-        if code == 250 {
-            return True;
-        }
-        if code in (550, 551, 553) {
-            return False;
-        }
-        return None;
+        (code, _) = await smtp.rcpt(email);
+        return True if code == 250 else False if code in (550, 551, 553) else None;
     } except Exception as e {
         logger.debug(f"SMTP verification failed for {email}: {e}");
         return None;
@@ -575,146 +408,100 @@ impl verify_email_smtp(email: builtins.str) -> Optional[builtins.bool] {
     }
 }
 
-impl detect_catch_all(domain: builtins.str) -> Optional[builtins.bool] {
-    fake: any = f"zz-no-such-user-{random.randint(10000, 99999)}@{_clean_domain(domain)}";
-    result: any = await verify_email_smtp(fake);
-    if result is True {
-        return True;
-    }
-    if result is False {
-        return False;
-    }
-    return None;
+impl detect_catch_all(domain: str) -> bool | None {
+    result = await verify_email_smtp(
+        f"zz-no-such-user-{random.randint(10000, 99999)}@{_clean_domain(domain)}"
+    );
+    return result if isinstance(result, `bool) else None;
 }
 
-impl _status_from_verdict(verdict: builtins.dict) -> Optional[builtins.str] {
-    if verdict.get("catch_all") {
+impl _status_from_verdict(verdict: dict[str, any]) -> str | None {
+    status = verdict.get("status", "");
+    if verdict.get("catch_all") or status in ("catch_all", "catch-all", "accept_all") {
         return "risky";
     }
-    status: any = verdict.get("status", "");
     if status in ("valid", "deliverable", "safe") {
         return "verified";
     }
-    if status in ("invalid", "undeliverable", "disabled", "disposable", "spamtrap") {
-        return "invalid";
-    }
-    if status in ("catch_all", "catch-all", "accept_all") {
-        return "risky";
-    }
-    return None;
+    return "invalid"
+        if status in ("invalid", "undeliverable", "disabled", "disposable", "spamtrap")
+        else None;
 }
 
-impl _verify_candidate(
-    email: builtins.str, mx_type: builtins.str, env
-) -> builtins.tuple[Optional[builtins.str], builtins.bool] {
-    reoon_key: any;
-    zerobounce_key: any;
-    hunter_key: any;
+impl _ask(email: str, channels: list[tuple[any, str]]) -> tuple[str | None, bool] {
+    seen = False;
+    for (verify_with, key) in channels {
+        verdict = await verify_with(email, key) if key else None;
+        if not verdict {
+            continue;
+        }
+        seen = seen or `bool(verdict.get("catch_all"));
+        status = _status_from_verdict(verdict);
+        if status is not None {
+            return (status, seen);
+        }
+    }
+    return (None, seen);
+}
+
+impl _verify_candidate(email: str, mx_type: str, env: any) -> tuple[str | None, bool] {
     reoon_key = getattr(env, "reoon_api_key", "") if env else "";
     zerobounce_key = getattr(env, "zerobounce_api_key", "") if env else "";
     hunter_key = _hunter_api_key();
-
-    catch_all_seen: any = False;
     if mx_type in ("google", "microsoft", "gateway") {
-        channels: any = [];
-        if zerobounce_key {
-            channels.append(lambda -> any { verify_zerobounce(email, zerobounce_key) });
-        }
-        if reoon_key {
-            channels.append(lambda -> any { verify_reoon(email, reoon_key) });
-        }
-        if hunter_key {
-            channels.append(lambda -> any { verify_hunter(email, hunter_key) });
-        }
-        for channel in channels {
-            verdict: any = await channel();
-            if verdict is None {
-                continue;
-            }
-            if verdict.get("catch_all") {
-                catch_all_seen = True;
-            }
-            status: any = _status_from_verdict(verdict);
-            if status is not None {
-                return (status, catch_all_seen);
-            }
-        }
-        return (None, catch_all_seen);
+        return await _ask(
+            email,
+            [
+                (verify_zerobounce, zerobounce_key),
+                (verify_reoon, reoon_key),
+                (verify_hunter, hunter_key),
+            ],
+        );
     }
-    if reoon_key {
-        verdict = await verify_reoon(email, reoon_key);
-        if verdict {
-            if verdict.get("catch_all") {
-                catch_all_seen = True;
-            }
-            status = _status_from_verdict(verdict);
-            if status is not None {
-                return (status, catch_all_seen);
-            }
-        }
+    (status, seen) = await _ask(email, [(verify_reoon, reoon_key)]);
+    if status is not None {
+        return (status, seen);
     }
-
-    smtp: any = await verify_email_smtp(email);
+    smtp = await verify_email_smtp(email);
     if smtp is True {
-        if await detect_catch_all(email.split("@")[1]) is True {
-            return ("risky", True);
-        }
-        return ("verified", catch_all_seen);
+        return ("risky", True)
+            if await detect_catch_all(email.split("@")[1]) is True
+            else ("verified", seen);
     }
     if smtp is False {
-        return ("invalid", catch_all_seen);
+        return ("invalid", seen);
     }
-
-    if hunter_key {
-        verdict = await verify_hunter(email, hunter_key);
-        if verdict {
-            if verdict.get("catch_all") {
-                catch_all_seen = True;
-            }
-            status = _status_from_verdict(verdict);
-            if status is not None {
-                return (status, catch_all_seen);
-            }
-        }
-    }
-
-    return (None, catch_all_seen);
+    (status, later) = await _ask(email, [(verify_hunter, hunter_key)]);
+    return (status, seen or later);
 }
 
-impl verify_published_address(email: builtins.str, env=None) -> builtins.str {
+impl verify_published_address(email: str, env: any = None) -> str {
     email = (email or "").strip().lower();
-    domain: any = email.partition("@")[2];
-    if not domain {
-        return "invalid";
-    }
-    mx_host: any = await get_mx_host(domain);
+    domain = email.partition("@")[2];
+    mx_host = await get_mx_host(domain) if domain else None;
     if not mx_host {
         return "invalid";
     }
-    status: any;
-    _: any;
-    (status, _) = await _verify_candidate(email, classify_mx(mx_host), env) as any;
+    (status, _) = await _verify_candidate(email, classify_mx(mx_host), env);
     return status or "guess";
 }
 
 impl _belongs_to_someone_else(
-    candidate, pattern, person, domain, other_people, known_emails
-) -> builtins.bool {
-    me: any = (_clean_name_part(person[0]), _clean_name_part(person[1]));
-    first: any;
-    last: any;
+    candidate: str,
+    pattern: str,
+    person: tuple[str, str],
+    domain: str,
+    other_people: any,
+    known_emails: any,
+) -> bool {
+    me = _name(person[0], person[1]);
     for (email, first, last) in known_emails or [] {
-        if email.strip().lower() == candidate
-            and (_clean_name_part(first), _clean_name_part(last)) != me
-        {
+        if email.strip().lower() == candidate and _name(first, last) != me {
             return True;
         }
     }
     for (first, last) in other_people or [] {
-        if (_clean_name_part(first), _clean_name_part(last)) == me {
-            continue;
-        }
-        if build_email(pattern, first, last, domain) == candidate {
+        if _name(first, last) != me and build_email(pattern, first, last, domain) == candidate {
             return True;
         }
     }
@@ -722,41 +509,34 @@ impl _belongs_to_someone_else(
 }
 
 impl find_email(
-    first_name: builtins.str,
-    last_name: builtins.str,
-    domain: builtins.str,
-    verify: builtins.bool = True,
-    env=None,
-    state=None,
-    known_emails: Optional[builtins.list[builtins.tuple[builtins.str, builtins.str, builtins.str]]] = None,
-    default_pattern: builtins.str = default_pattern_default__,
-    other_people: Optional[builtins.list[builtins.tuple[builtins.str, builtins.str]]] = None,
+    first_name: str,
+    last_name: str,
+    domain: str,
+    verify: bool = True,
+    env: any = None,
+    state: any = None,
+    known_emails: list[tuple[str, str, str]] | None = None,
+    default_pattern: str = DEFAULT_PATTERN,
+    other_people: list[tuple[str, str]] | None = None,
 ) -> EmailResult {
     domain = _clean_domain(domain);
     if not (first_name and last_name and domain) {
-        return EmailResult(email="", status="invalid");
+        return EmailResult("", "invalid");
     }
-
-    mx_host: any = await get_mx_host(domain);
+    mx_host = await get_mx_host(domain);
     if not mx_host {
-        guess: any = build_email(DEFAULT_PATTERN, first_name, last_name, domain);
-        return EmailResult(email=guess, status="invalid", mx_type="none");
+        return EmailResult(
+            build_email(DEFAULT_PATTERN, first_name, last_name, domain), "invalid", mx_type="none"
+        );
     }
-
-    mx_type: any = classify_mx(mx_host);
-
-    pattern: any;
-    source: any;
-    confidence: any;
+    mx_type = classify_mx(mx_host);
     (pattern, source, confidence) = await derive_pattern(
         domain, known_emails=known_emails, state=state, default_pattern=default_pattern
-    ) as any;
-    candidate: any = build_email(pattern, first_name, last_name, domain);
-    `own: any = (_clean_name_part(first_name), _clean_name_part(last_name));
+    );
+    candidate = build_email(pattern, first_name, last_name, domain);
+    me = _name(first_name, last_name);
     for (email, first, last) in known_emails or [] {
-        if (_clean_name_part(first), _clean_name_part(last)) == `own
-            and email.split("@")[-1].lower() == domain
-        {
+        if _name(first, last) == me and email.split("@")[-1].lower() == domain {
             candidate = email.strip().lower();
             pattern = infer_pattern_from_email(candidate, first, last) or pattern;
             break;
@@ -768,13 +548,14 @@ impl find_email(
         logger.info(
             f"Email for {first_name} {last_name}@{domain}: {candidate} could be another named person's mailbox; not guessed",
         );
-        return EmailResult(email="", status="guess", pattern=pattern, mx_type=mx_type);
+        return EmailResult("", "guess", pattern, mx_type);
     }
     if not candidate {
-        candidate = build_email(DEFAULT_PATTERN, first_name, last_name, domain);
-        pattern = DEFAULT_PATTERN;
+        (candidate, pattern) = (
+            build_email(DEFAULT_PATTERN, first_name, last_name, domain),
+            DEFAULT_PATTERN,
+        );
     }
-
     if state is not None {
         try {
             await state.save_email_pattern(
@@ -784,25 +565,16 @@ impl find_email(
             logger.debug(f"Pattern cache write failed for {domain}: {e}");
         }
     }
-
     if not verify {
-        return EmailResult(email=candidate, status="guess", pattern=pattern, mx_type=mx_type);
+        return EmailResult(candidate, "guess", pattern, mx_type);
     }
-
-    status: any;
-    catch_all: any;
-    (status, catch_all) = await _verify_candidate(candidate, mx_type, env) as any;
-
+    (status, catch_all) = await _verify_candidate(candidate, mx_type, env);
     if catch_all and state is not None {
         try {
             await state.save_email_pattern(domain, mx_type=mx_type, is_catch_all=1);
         } except Exception {}
     }
-
-    if status is None {
-        status = "guess";
-    }
-
+    status = "guess" if status is None else status;
     logger.info(f"Email for {first_name} {last_name}@{domain}: {candidate} [{status}]");
-    return EmailResult(email=candidate, status=status, pattern=pattern, mx_type=mx_type);
+    return EmailResult(candidate, status, pattern, mx_type);
 }
