@@ -1,5 +1,6 @@
 import builtins;
 import importlib;
+import functools;
 import json;
 import logging;
 import sqlite3;
@@ -17,10 +18,10 @@ glob logger = logging.getLogger("sellbird.mailboxes"),
      _STARTED = ("sent", "sending"),
      MAX_KEYCHAIN_TOKEN_CHARS = 1200,
      _KEPT_TOKEN_FIELDS = ("refresh_token", "tenant"),
-     _OAUTH_PROVIDERS = {
-         "google": ("gmail", "GmailProvider"),
-         "microsoft": ("microsoft", "MicrosoftProvider"),
-     },
+     _OAUTH_PROVIDERS = dict(google="gmail.GmailProvider", microsoft="microsoft.MicrosoftProvider"),
+     _TOO_LARGE = "This {} sign-in is too large for the Windows keychain, so it can't be stored. Connect this inbox with its SMTP login instead.",
+     _NOT_NATIVE = "Your sending provider is {}. Instantly installs send through Instantly only. Set channels.email.provider to gmail, microsoft or smtp before connecting inboxes.",
+     _BAD_WARMUP = "Give the day this inbox started warming up as YYYY-MM-DD, or leave it out for an established inbox.",
      _FINGERPRINT = "connection provider address display_name credential_ref settings_json".split();
 
 class MailboxExists(Exception) {}
@@ -29,10 +30,7 @@ class ConnectRefused(Exception) {}
 
 class TokenTooLarge(ConnectRefused) {
     def init(provider: str = "Microsoft") {
-        super.init(
-            f"This {provider} sign-in is too large for the Windows keychain, so it can't "
-                "be stored. Connect this inbox with its SMTP login instead.",
-        );
+        super.init(_TOO_LARGE.format(provider));
     }
 }
 
@@ -49,9 +47,8 @@ def smtp_ref(mailbox_id: str) -> str {
 }
 
 def keychain_token(token: builtins.dict, provider: str = "Microsoft") -> str {
-    raw = json.dumps(
-        {k: token[k] for k in _KEPT_TOKEN_FIELDS if token.get(k)}, separators=(",", ":")
-    );
+    kept = {k: token[k] for k in _KEPT_TOKEN_FIELDS if token.get(k)};
+    raw = json.dumps(kept, separators=(",", ":"));
     if len(raw) > MAX_KEYCHAIN_TOKEN_CHARS {
         raise TokenTooLarge(provider);
     }
@@ -61,11 +58,6 @@ def keychain_token(token: builtins.dict, provider: str = "Microsoft") -> str {
 class KeychainTokenSource {
     has _secrets: any = None,
         _ref: str = "";
-
-    def init(secrets: any, ref: str) {
-        self._secrets = secrets;
-        self._ref = ref;
-    }
 
     def load -> builtins.dict | None {
         raw = self._secrets.get(self._ref);
@@ -141,29 +133,20 @@ class MailboxStore(StateManager) {
         if provider not in PROVIDERS and connection in BUILT_IN_CONNECTIONS {
             raise ValueError(f"unknown mailbox provider {provider!r}");
         }
-        (name, blob, warm) = (
-            (display_name or "").strip(),
-            json.dumps(settings or {}),
-            warmup_started_at or None,
-        );
+        name = (display_name or "").strip();
+        (blob, warm) = (json.dumps(settings or {}), warmup_started_at or None);
+        revive = "UPDATE mailboxes SET state = 'active', provider = ?, connection = ?, display_name = ?, credential_ref = ?, settings_json = ?, warmup_started_at = ?, paused_reason = '', cap_override = NULL WHERE id = ? AND address = ? AND state = 'retired'";
+        insert = "INSERT INTO mailboxes (id, address, display_name, provider, connection, credential_ref, settings_json, warmup_started_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
         async with self._connect() as db {
-            cur = await db.execute(
-                "UPDATE mailboxes SET state = 'active', provider = ?, connection = ?,"
-                    " display_name = ?, credential_ref = ?, settings_json = ?,"
-                    " warmup_started_at = ?, paused_reason = '', cap_override = NULL"
-                    " WHERE id = ? AND address = ? AND state = 'retired'",
-                (provider, connection, name, credential_ref, blob, warm, mailbox_id, addr),
-            );
+            values = (provider, connection, name, credential_ref, blob, warm);
+            cur = await db.execute(revive, (*values, mailbox_id, addr));
             if cur.rowcount {
                 await db.commit();
                 return mailbox_id;
             }
             try {
-                await db.execute(
-                    "INSERT INTO mailboxes (id, address, display_name, provider, connection,"
-                        " credential_ref, settings_json, warmup_started_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                    (mailbox_id, addr, name, provider, connection, credential_ref, blob, warm),
-                );
+                row = (mailbox_id, addr, name, provider, connection, credential_ref, blob, warm);
+                await db.execute(insert, row);
             } except sqlite3.IntegrityError as e {
                 if "mailboxes.address" in str(e) {
                     raise MailboxExists(addr) from None;
@@ -176,40 +159,28 @@ class MailboxStore(StateManager) {
     }
 
     async def set_pause(mailbox_id: str, reason: str) -> bool {
-        return await self._changed(
-            "UPDATE mailboxes SET paused_reason = ? WHERE id = ?",
-            ((reason or "").strip(), mailbox_id),
-        );
+        sql = "UPDATE mailboxes SET paused_reason = ? WHERE id = ?";
+        return await self._changed(sql, ((reason or "").strip(), mailbox_id));
     }
 
     async def set_cap(mailbox_id: str, cap: int | None) -> bool {
-        if cap is not None
-            and (
-                isinstance(cap, bool)
-                or not isinstance(cap, int)
-                or cap < 1
-                or cap > HARD_MAX_INBOX_CAP
-            )
-        {
+        whole = isinstance(cap, int) and not isinstance(cap, bool);
+        if cap is not None and not (whole and cap >= 1 and cap <= HARD_MAX_INBOX_CAP) {
             raise ValueError(f"cap must be between 1 and {HARD_MAX_INBOX_CAP}");
         }
-        return await self._changed(
-            "UPDATE mailboxes SET cap_override = ? WHERE id = ?", (cap, mailbox_id)
-        );
+        sql = "UPDATE mailboxes SET cap_override = ? WHERE id = ?";
+        return await self._changed(sql, (cap, mailbox_id));
     }
 
     async def set_display_name(mailbox_id: str, name: str) -> bool {
-        return await self._changed(
-            "UPDATE mailboxes SET display_name = ? WHERE id = ?", ((name or "").strip(), mailbox_id)
-        );
+        sql = "UPDATE mailboxes SET display_name = ? WHERE id = ?";
+        return await self._changed(sql, ((name or "").strip(), mailbox_id));
     }
 
     async def retire(mailbox_id: str) -> bool {
+        sql = "UPDATE mailboxes SET state = 'retired' WHERE id = ? AND state != 'retired'";
         async with self._connect() as db {
-            cur = await db.execute(
-                "UPDATE mailboxes SET state = 'retired' WHERE id = ? AND state != 'retired'",
-                (mailbox_id,),
-            );
+            cur = await db.execute(sql, (mailbox_id,));
             await db.execute("DELETE FROM campaign_mailboxes WHERE mailbox_id = ?", (mailbox_id,));
             await db.commit();
             return cur.rowcount > 0;
@@ -217,23 +188,19 @@ class MailboxStore(StateManager) {
     }
 
     async def set_campaign_pool(campaign_id: str, mailbox_ids: list[str]) {
+        sql = "INSERT INTO campaign_mailboxes (campaign_id, mailbox_id) VALUES (?, ?)";
         async with self._connect() as db {
             await db.execute(
                 "DELETE FROM campaign_mailboxes WHERE campaign_id = ?", (campaign_id,)
             );
-            await db.executemany(
-                "INSERT INTO campaign_mailboxes (campaign_id, mailbox_id) VALUES (?, ?)",
-                [(campaign_id, m) for m in dict.fromkeys(mailbox_ids)],
-            );
+            await db.executemany(sql, [(campaign_id, m) for m in dict.fromkeys(mailbox_ids)]);
             await db.commit();
         }
     }
 
     async def campaign_pool(campaign_id: str) -> set[str] {
-        rows = await self._dicts(
-            "SELECT mailbox_id FROM campaign_mailboxes WHERE campaign_id = ?", (campaign_id,)
-        );
-        return {r["mailbox_id"] or MAIN for r in rows};
+        sql = "SELECT mailbox_id FROM campaign_mailboxes WHERE campaign_id = ?";
+        return {r["mailbox_id"] or MAIN for r in await self._dicts(sql, (campaign_id,))};
     }
 
     async def campaign_pools -> dict[str, set[str]] {
@@ -255,53 +222,34 @@ class MailboxStore(StateManager) {
     }
 
     async def queued_first_emails -> dict[str, int] {
-        rows = await self._dicts(
-            "SELECT COALESCE(mailbox_id, '') AS m, COUNT(*) AS n FROM outbox"
-                " WHERE kind = 'sequence' AND step <= 1 AND status IN ('pending_review', 'approved')"
-                " GROUP BY COALESCE(mailbox_id, '')",
-        );
-        return {r["m"]: r["n"] for r in rows};
+        sql = "SELECT COALESCE(mailbox_id, '') AS m, COUNT(*) AS n FROM outbox WHERE kind = 'sequence' AND step <= 1 AND status IN ('pending_review', 'approved') GROUP BY COALESCE(mailbox_id, '')";
+        return {r["m"]: r["n"] for r in await self._dicts(sql)};
     }
 
     async def unsent_off_main -> bool {
-        return await self._dict(
-            "SELECT 1 FROM outbox WHERE COALESCE(mailbox_id, '') != ''"
-                " AND status IN ('pending_review', 'approved') LIMIT 1",
-        )
-            is not None;
+        sql = "SELECT 1 FROM outbox WHERE COALESCE(mailbox_id, '') != '' AND status IN ('pending_review', 'approved') LIMIT 1";
+        return await self._dict(sql) is not None;
     }
 
     async def thread_started(campaign_id: str, prospect_id: str) -> bool {
-        return await self._dict(
-            "SELECT 1 FROM outbox WHERE COALESCE(campaign_id, '') = ? AND prospect_id = ?"
-                " AND kind = 'sequence' AND status IN (?, ?) LIMIT 1",
-            (campaign_id or "", prospect_id, *_STARTED),
-        )
-            is not None;
+        sql = "SELECT 1 FROM outbox WHERE COALESCE(campaign_id, '') = ? AND prospect_id = ? AND kind = 'sequence' AND status IN (?, ?) LIMIT 1";
+        return await self._dict(sql, (campaign_id or "", prospect_id, *_STARTED)) is not None;
     }
 
     async def thread_mailbox(campaign_id: str, prospect_id: str) -> str {
-        row = await self._dict(
-            "SELECT COALESCE(mailbox_id, '') AS m FROM outbox WHERE COALESCE(campaign_id, '') = ?"
-                " AND prospect_id = ? AND kind = 'sequence' ORDER BY step LIMIT 1",
-            (campaign_id or "", prospect_id),
-        );
+        sql = "SELECT COALESCE(mailbox_id, '') AS m FROM outbox WHERE COALESCE(campaign_id, '') = ? AND prospect_id = ? AND kind = 'sequence' ORDER BY step LIMIT 1";
+        row = await self._dict(sql, (campaign_id or "", prospect_id));
         return row["m"] if row else MAIN;
     }
 
     async def set_thread_mailbox(campaign_id: str, prospect_id: str, mailbox_id: str) {
-        await self._exec(
-            "UPDATE outbox SET mailbox_id = ? WHERE COALESCE(campaign_id, '') = ?"
-                " AND prospect_id = ? AND kind = 'sequence' AND status IN (?, ?)",
-            (mailbox_id, campaign_id or "", prospect_id, *_UNSENT),
-        );
+        sql = "UPDATE outbox SET mailbox_id = ? WHERE COALESCE(campaign_id, '') = ? AND prospect_id = ? AND kind = 'sequence' AND status IN (?, ?)";
+        await self._exec(sql, (mailbox_id, campaign_id or "", prospect_id, *_UNSENT));
     }
 
     async def conversation_mailbox(conversation_id: str) -> str {
-        row = await self._dict(
-            "SELECT COALESCE(mailbox_id, '') AS m FROM conversations WHERE id = ?",
-            (conversation_id,),
-        );
+        sql = "SELECT COALESCE(mailbox_id, '') AS m FROM conversations WHERE id = ?";
+        row = await self._dict(sql, (conversation_id,));
         return row["m"] if row else MAIN;
     }
 }
@@ -324,12 +272,8 @@ def inbox_cold_cap(row: builtins.dict, email_cfg: any, today: date | None = None
     if not isinstance(shape, WarmupConfig) {
         shape = WarmupConfig();
     }
-    ramp = WarmupConfig(
-        start_date=str(row.get("warmup_started_at") or "")[:10],
-        min_days=shape.min_days,
-        start_sends=shape.start_sends,
-        daily_increase=shape.daily_increase,
-    );
+    keep = shape.model_dump(include={"min_days", "start_sends", "daily_increase"});
+    ramp = WarmupConfig(start_date=str(row.get("warmup_started_at") or "")[:10], **keep);
     return ramp.daily_cap(per_inbox_cap(email_cfg), today);
 }
 
@@ -340,17 +284,16 @@ def _ramped(email_cfg: any, ceiling: int, today: date) -> int {
 
 def _smtp_settings(row: builtins.dict, password: str) -> any {
     SmtpSettings = _integration("smtp_mail").SmtpSettings;
-    stored: any = {};
     try {
-        stored = json.loads(row.get("settings_json") or "{}");
-    } except ValueError {}
-    known = {f.name for f in fields(SmtpSettings) if f.name != "password"};
-    kept: builtins.dict = {};
-    if isinstance(stored, dict) {
-        kept = {k: v for (k, v) in stored.items() if k in known};
+        stored: any = json.loads(row.get("settings_json") or "{}");
+    } except ValueError {
+        stored = None;
     }
-    kept.setdefault("host", "");
-    kept.setdefault("username", row.get("address", ""));
+    known = {f.name for f in fields(SmtpSettings) if f.name != "password"};
+    kept: dict[str, any] = {"host": "", "username": row.get("address", "")};
+    if isinstance(stored, dict) {
+        kept |= {k: v for (k, v) in stored.items() if k in known};
+    }
     return SmtpSettings(**kept, password=password);
 }
 
@@ -358,29 +301,25 @@ def build_provider(row: builtins.dict, *, config: any, env: any, secrets: any) -
     if row.get("state") == "retired" {
         return None;
     }
-    address = row.get("address", "") or "";
-    identity = MailIdentity(
-        address,
-        (row.get("display_name") or "").strip() or identity_from_config(config).display_name,
-    );
+    name = (row.get("display_name") or "").strip() or identity_from_config(config).display_name;
+    identity = MailIdentity(row.get("address", "") or "", name);
     (connection, provider) = (row.get("connection", ""), row.get("provider", ""));
     if connection == "oauth" {
         tokens = KeychainTokenSource(secrets, oauth_ref(row["id"]));
         if provider not in _OAUTH_PROVIDERS {
             return None;
         }
-        (module, name) = _OAUTH_PROVIDERS[provider];
+        (module, name) = _OAUTH_PROVIDERS[provider].split(".");
         return getattr(_integration(module), name)(config, env, identity=identity, tokens=tokens);
     }
     if connection == "smtp" {
-        settings = _smtp_settings(row, secrets.get(smtp_ref(row["id"])) or "");
+        smtp = _smtp_settings(row, secrets.get(smtp_ref(row["id"])) or "");
         return _integration("smtp_mail").SmtpImapProvider(
-            config, env, identity=identity, smtp=settings
+            config, env, identity=identity, smtp=smtp
         );
     }
-    builder = importlib.import_module("sellbird.extensions").registry().mailbox_connections.get(
-        connection
-    );
+    connections = importlib.import_module("sellbird.extensions").registry().mailbox_connections;
+    builder = connections.get(connection);
     return None if builder is None else builder(row, config=config, env=env, secrets=secrets);
 }
 
@@ -390,11 +329,7 @@ def check_provider_allows_inboxes(config: any) {
         return;
     }
     name = "Instantly" if provider == "instantly" else (provider or "not set");
-    raise ConnectRefused(
-        f"Your sending provider is {name}. Instantly installs send through Instantly "
-            "only. Set channels.email.provider to gmail, microsoft or smtp before "
-            "connecting inboxes.",
-    );
+    raise ConnectRefused(_NOT_NATIVE.format(name));
 }
 
 async def _check_address(store: MailboxStore, config: any, address: str) -> tuple[str, str] {
@@ -420,9 +355,7 @@ def check_warmup_start(value: str) -> str {
     try {
         day = date.fromisoformat(value[:10]);
     } except ValueError {
-        raise ConnectRefused(
-            "Give the day this inbox started warming up as YYYY-MM-DD, or leave it out for an established inbox.",
-        ) from None;
+        raise ConnectRefused(_BAD_WARMUP) from None;
     }
     if (day - datetime.now(timezone.utc).date()).days > 1 {
         raise ConnectRefused("The warmup start can't be in the future.");
@@ -430,12 +363,34 @@ def check_warmup_start(value: str) -> str {
     return day.isoformat();
 }
 
-async def _insert(store: MailboxStore, **row: any) -> str {
+async def _connect(
+    store: any,
+    secrets: any,
+    config: any,
+    address: str,
+    warmup: str,
+    ref_of: any,
+    value: any,
+    row: any,
+) -> str {
+    check_provider_allows_inboxes(config);
+    (addr, mailbox_id) = await _check_address(store, config, address);
+    warmup = check_warmup_start(warmup);
+    (ref, secret) = (ref_of(mailbox_id), value());
+    secrets.set(ref, secret);
+    row |= {"mailbox_id": mailbox_id, "address": addr, "credential_ref": ref};
     try {
-        return await store.add_mailbox(**row);
+        return await store.add_mailbox(**row, warmup_started_at=warmup);
     } except MailboxExists {
         raise ConnectRefused("That inbox is already connected.") from None;
     }
+}
+
+def _smtp_password(settings: any) -> str {
+    if not settings.host {
+        raise ConnectRefused("Give the SMTP server's host name.");
+    }
+    return settings.password;
 }
 
 async def connect_oauth_mailbox(
@@ -449,21 +404,10 @@ async def connect_oauth_mailbox(
     warmup_started_at: str,
     token: builtins.dict,
 ) -> str {
-    check_provider_allows_inboxes(config);
-    (addr, mailbox_id) = await _check_address(store, config, address);
-    warmup = check_warmup_start(warmup_started_at);
-    ref = oauth_ref(mailbox_id);
-    secrets.set(ref, keychain_token(token, "Google" if provider == "google" else "Microsoft"));
-    return await _insert(
-        store,
-        mailbox_id=mailbox_id,
-        address=addr,
-        provider=provider,
-        connection="oauth",
-        display_name=display_name,
-        credential_ref=ref,
-        warmup_started_at=warmup,
-    );
+    label = "Google" if provider == "google" else "Microsoft";
+    key = functools.partial(keychain_token, token, label);
+    row = {"provider": provider, "connection": "oauth", "display_name": display_name};
+    return await _connect(store, secrets, config, address, warmup_started_at, oauth_ref, key, row);
 }
 
 async def connect_smtp_mailbox(
@@ -476,25 +420,10 @@ async def connect_smtp_mailbox(
     warmup_started_at: str,
     settings: any,
 ) -> str {
-    check_provider_allows_inboxes(config);
-    (addr, mailbox_id) = await _check_address(store, config, address);
-    warmup = check_warmup_start(warmup_started_at);
-    if not settings.host {
-        raise ConnectRefused("Give the SMTP server's host name.");
-    }
-    ref = smtp_ref(mailbox_id);
-    secrets.set(ref, settings.password);
-    return await _insert(
-        store,
-        mailbox_id=mailbox_id,
-        address=addr,
-        provider="smtp",
-        connection="smtp",
-        display_name=display_name,
-        credential_ref=ref,
-        settings=settings.public(),
-        warmup_started_at=warmup,
-    );
+    key = functools.partial(_smtp_password, settings);
+    row: dict[str, any] = {"provider": "smtp", "connection": "smtp", "display_name": display_name};
+    row["settings"] = settings.public();
+    return await _connect(store, secrets, config, address, warmup_started_at, smtp_ref, key, row);
 }
 
 @dataclass
@@ -567,14 +496,7 @@ class Inboxes {
     }
 
     def pick(campaign_id: str) -> Inbox | None {
-        candidates = self.eligible(campaign_id);
-        if not candidates {
-            return None;
-        }
-        return min(
-            candidates,
-            key=lambda (i: Inbox) -> tuple[any, ...] { return (-i.room, not i.main, i.address); },
-        );
+        return min(self.eligible(campaign_id), key=_rank, default=None);
     }
 
     async def assign(campaign_id: str, prospect_id: str, *, staged_now: bool = False) -> str
@@ -586,8 +508,7 @@ class Inboxes {
         before = None if staged_now else await self.store.thread_mailbox(campaign_id, prospect_id);
         await self.store.set_thread_mailbox(campaign_id, prospect_id, inbox.id);
         if before != inbox.id {
-            old = self.get(before) if before is not None else None;
-            if old is not None {
+            if before is not None and (old := self.get(before)) is not None {
                 old.queued_first -= 1;
             }
             inbox.queued_first += 1;
@@ -599,9 +520,8 @@ class Inboxes {
         mailbox_id = item.get("mailbox_id") or MAIN;
         campaign_id = item.get("campaign_id") or "";
         if item.get("kind") == "sequence" {
-            if int(item.get("step") or 1) <= 1
-                and not await self.store.thread_started(campaign_id, item["prospect_id"])
-            {
+            first = int(item.get("step") or 1) <= 1;
+            if first and not await self.store.thread_started(campaign_id, item["prospect_id"]) {
                 if mailbox_id in {i.id for i in self.eligible(campaign_id)} {
                     return Route("send", mailbox_id);
                 }
@@ -624,15 +544,18 @@ class Inboxes {
             return Route("cancel", mailbox_id, "its inbox was removed");
         }
         if not inbox.connected {
-            return Route(
-                "hold", mailbox_id, f"{inbox.address or 'the main mailbox'} isn't connected"
-            );
+            where = inbox.address or "the main mailbox";
+            return Route("hold", mailbox_id, f"{where} isn't connected");
         }
         if inbox.paused_reason {
             return Route("hold", mailbox_id, f"its inbox is paused: {inbox.paused_reason}");
         }
         return Route("send", mailbox_id);
     }
+}
+
+def _rank(inbox: Inbox) -> tuple[any, ...] {
+    return (-inbox.room, not inbox.main, inbox.address);
 }
 
 def _fingerprint(row: builtins.dict) -> tuple[any, ...] {
@@ -660,19 +583,14 @@ async def load_inboxes(
     rows = await store.list_mailboxes();
     routed = await store.unsent_off_main();
     if main_provider is not None {
-        persona = identity_from_config(config);
+        me = identity_from_config(config);
         cap = cold_daily_cap(email_cfg, today);
         if rows or routed {
             cap = min(cap, _ramped(email_cfg, per_inbox_cap(email_cfg), today));
         }
+        sent = await store.sent_since(MAIN, since, kind="sequence");
         inboxes[MAIN] = Inbox(
-            id=MAIN,
-            address=persona.address,
-            name=persona.display_name,
-            provider=main_provider,
-            cap=cap,
-            sent_today=await store.sent_since(MAIN, since, kind="sequence"),
-            queued_first=queued.get(MAIN, 0),
+            MAIN, me.address, me.display_name, main_provider, cap, sent, queued.get(MAIN, 0)
         );
     }
     if cache is not None {
@@ -681,16 +599,13 @@ async def load_inboxes(
         }
     }
     for row in rows {
-        inboxes[row["id"]] = Inbox(
-            id=row["id"],
-            address=row["address"],
-            name=(row.get("display_name") or "").strip()
-                or identity_from_config(config).display_name,
-            provider=_cached_provider(row, cache, config, env, secrets),
-            cap=inbox_cold_cap(row, email_cfg, today),
-            sent_today=await store.sent_since(row["id"], since, kind="sequence"),
-            queued_first=queued.get(row["id"], 0),
-            paused_reason=row.get("paused_reason") or "",
+        name = (row.get("display_name") or "").strip() or identity_from_config(config).display_name;
+        provider = _cached_provider(row, cache, config, env, secrets);
+        cap = inbox_cold_cap(row, email_cfg, today);
+        sent = await store.sent_since(row["id"], since, kind="sequence");
+        (mid, paused) = (row["id"], row.get("paused_reason") or "");
+        inboxes[mid] = Inbox(
+            mid, row["address"], name, provider, cap, sent, queued.get(mid, 0), paused
         );
     }
     pools = await store.campaign_pools() if len(inboxes) > 1 else {};
