@@ -293,7 +293,7 @@ def _instantly_with_a_draft_and_an_open_conversation(monkeypatch, state, calls, 
     async def read(self):
         calls.append("replies")
         return read_ok
-    monkeypatch.setattr(handler_mod.Handler, "run", read)
+    monkeypatch.setattr(main_mod.Handler, "run", read)
     return main_mod
 
 

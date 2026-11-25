@@ -249,42 +249,6 @@ graph import {
     sellbird.startups ++> sellbird.agents.writer { startup_facts }
     sellbird.untrusted ++> sellbird.agents.writer { UNTRUSTED_RULE, fence }
     sellbird.workspace_home ++> sellbird.agents.writer { current_home }
-    sellbird.booking --> sellbird.agents.handler { booking_instruction }
-    sellbird.brain --> sellbird.agents.handler { Brain, BrainUnavailable }
-    sellbird.config --> sellbird.agents.handler {
-        DEFAULT_OPT_OUT_LINE,
-        EnvConfig,
-        PREVIOUS_DEFAULT_OPT_OUT_LINE,
-        SellbirdConfig,
-        compliance_of,
-        legacy_sending_held,
-        live_do_not_contact,
-    }
-    sellbird.gate --> sellbird.agents.handler {
-        autopilot_review,
-        do_not_contact_match,
-        pre_send_check,
-    }
-    sellbird.email_style --> sellbird.agents.handler { style_problems, tidy }
-    sellbird.humanize --> sellbird.agents.handler { humanize, humanizer_enabled }
-    sellbird.integrations.instantly --> sellbird.agents.handler { InstantlyClient }
-    sellbird.integrations.mail_provider --> sellbird.agents.handler {
-        NATIVE_PROVIDERS,
-        get_mail_provider,
-        strip_quoted_reply,
-    }
-    sellbird.models.conversation --> sellbird.agents.handler { Conversation, Message }
-    sellbird.send_window --> sellbird.agents.handler { recipient_zone }
-    sellbird.state --> sellbird.agents.handler {
-        COLLEAGUE_REPLIED,
-        REVIEW_NEXT_REPLY_KEY,
-        StateManager,
-    }
-    sellbird.sending_mode --> sellbird.agents.handler { sync_sending_mode }
-    sellbird.startups --> sellbird.agents.handler { startup_facts }
-    sellbird.untrusted --> sellbird.agents.handler { UNTRUSTED_RULE, fence }
-    sellbird.mailboxes --> sellbird.agents.handler { load_inboxes }
-    sellbird.handoff --> sellbird.agents.handler { hand_off }
     sellbird.state ++> sellbird.agents.analyst { StateManager }
     sellbird.dashboard_instance --> sellbird.mcp_server;
     sellbird.dashboard_auth --> sellbird.mcp_server { TokenError, load_or_create_token }
@@ -1633,6 +1597,36 @@ graph import {
     sellbird.models.conversation ++> sellbird.agents.sender { Message }
     sellbird.storage as storage ++> sellbird.agents.sender;
     sellbird.agents.sender --> tests.test_email_style;
+    sellbird.booking ++> sellbird.agents.handler { booking_instruction }
+    sellbird.brain ++> sellbird.agents.handler { BrainUnavailable }
+    sellbird.config ++> sellbird.agents.handler {
+        DEFAULT_OPT_OUT_LINE,
+        PREVIOUS_DEFAULT_OPT_OUT_LINE,
+        compliance_of,
+        legacy_sending_held,
+        live_do_not_contact,
+    }
+    sellbird.gate ++> sellbird.agents.handler {
+        autopilot_review,
+        do_not_contact_match,
+        pre_send_check,
+    }
+    sellbird.email_style ++> sellbird.agents.handler { style_problems, tidy }
+    sellbird.humanize ++> sellbird.agents.handler { humanize, humanizer_enabled }
+    sellbird.integrations.instantly ++> sellbird.agents.handler { InstantlyClient }
+    sellbird.integrations.mail_provider ++> sellbird.agents.handler {
+        NATIVE_PROVIDERS,
+        get_mail_provider,
+        strip_quoted_reply,
+    }
+    sellbird.models.conversation ++> sellbird.agents.handler { Conversation, Message }
+    sellbird.send_window ++> sellbird.agents.handler { recipient_zone }
+    sellbird.state ++> sellbird.agents.handler { COLLEAGUE_REPLIED, REVIEW_NEXT_REPLY_KEY }
+    sellbird.sending_mode ++> sellbird.agents.handler { sync_sending_mode }
+    sellbird.startups ++> sellbird.agents.handler { startup_facts }
+    sellbird.untrusted ++> sellbird.agents.handler { UNTRUSTED_RULE, fence }
+    sellbird.mailboxes ++> sellbird.agents.handler { load_inboxes }
+    sellbird.handoff ++> sellbird.agents.handler { hand_off }
 }
 
 graph spaces {

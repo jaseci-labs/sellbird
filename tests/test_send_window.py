@@ -794,7 +794,7 @@ def _patch_heartbeat(monkeypatch, cfg, state, calls, stop):
     monkeypatch.setattr(sellbird.agents.scout, "Scout", agent("prospect"))
     monkeypatch.setattr(sellbird.agents.writer, "Writer", agent("write"))
     monkeypatch.setattr(main_mod, "Sender", agent("send"))
-    monkeypatch.setattr(sellbird.agents.handler, "Handler", agent("replies"))
+    monkeypatch.setattr(main_mod, "Handler", agent("replies"))
     monkeypatch.setattr(sellbird.agents.analyst, "Analyst", agent("analyze"))
     return main_mod
 
