@@ -13,8 +13,8 @@ Sellbird (formerly Harvey) is an open-source outreach platform powered by Claude
 Start by checking what state things are in. Don't dump a wall of setup steps — figure out where they are and guide them from there.
 
 ### Quick health check (do this silently):
-1. Does `.venv/` exist? → If not, they need install
-2. Is `sellbird` importable? → If not, dependencies need installing
+1. Does `.jac/venv/` exist? → If not, they need `neojac install`
+2. Does `.jac/build/pypi/top/site/sellbird` exist? → If not, they need `neojac build`
 3. Does `.env` exist with real values? → If not, they need API keys
 4. Does `sellbird.yaml` have real values (not "Your Company")? → If not, they need product training
 5. Does `data/sellbird.db` exist? → If not, Sellbird hasn't run yet
@@ -67,7 +67,7 @@ Walk through these steps conversationally. Ask one thing at a time. Don't overwh
 ### Step 1: Install Dependencies
 
 ```bash
-python3 -m venv .venv && source .venv/bin/activate && pip install -e .
+neojac install && neojac build && source scripts/activate.sh
 ```
 
 Then install the browser for LinkedIn prospecting:
@@ -115,7 +115,7 @@ TRULYINBOX_API_KEY=        # warmup: set by 'sellbird trulyinbox connect' (see S
 
 After getting the Instantly API key, test it:
 ```bash
-source .venv/bin/activate && python3 -c "
+source scripts/activate.sh && python3 -c "
 import asyncio, httpx
 async def test():
     async with httpx.AsyncClient(timeout=10) as c:
@@ -156,7 +156,7 @@ This is the most important step. Sellbird needs to know what it's selling.
 
 **Option A — Train from a website URL (recommended):**
 ```bash
-source .venv/bin/activate && python -m sellbird.trainer https://their-website.com
+source scripts/activate.sh && python -m sellbird.trainer https://their-website.com
 ```
 This generates: `sellbird.yaml`, `skills/product_knowledge.md`, `skills/competitive_intel.md`
 
@@ -309,7 +309,7 @@ Leave `address_source` as `"unknown"`, since Sellbird builds most addresses from
 ### Step 8: Start Sellbird
 
 ```bash
-source .venv/bin/activate && sellbird run
+source scripts/activate.sh && sellbird run
 ```
 
 Or open the dashboard:
@@ -362,7 +362,7 @@ send_campaigns > write_campaigns > prospect > idle (run analyst). Replies are re
 
 ### Key Commands
 ```bash
-source .venv/bin/activate    # Always activate venv first
+source scripts/activate.sh   # Always, in each new shell (after neojac install && neojac build)
 sellbird run                   # Start the heartbeat loop
 sellbird dashboard             # Web UI at http://127.0.0.1:5555 (open the printed link)
 sellbird setup                 # Re-run setup wizard
@@ -384,7 +384,7 @@ sellbird trulyinbox [connect|other]  # Warmup service: connect TrulyInbox, or re
 ```
 
 ### Common Issues
-- **"command not found: sellbird"**: Activate venv first: `source .venv/bin/activate`
+- **"command not found: sellbird"**: run `source scripts/activate.sh` in the checkout (after `neojac install && neojac build`). After editing a `.jac` file, run `neojac build` again.
 - **"ModuleNotFoundError: No module named 'sellbird'" after install (macOS)**: Python 3.13 silently ignores `.pth` files that carry the macOS hidden file flag, and some Macs propagate that flag into `.venv`. Run `sellbird install` again (it auto-fixes by linking the package), or manually: `ln -s "$(pwd)/sellbird" .venv/lib/python3.13/site-packages/sellbird`
 - **"externally-managed-environment"**: Use a venv, not system Python
 - **SQLite errors**: The `data/` directory is created automatically on first run

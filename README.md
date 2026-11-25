@@ -86,7 +86,7 @@ How the loop, the budget and the isolation work: [How Sellbird works](docs/how-i
 
 You need:
 
-- **Python 3.11 or newer.** macOS ships 3.9, so run `brew install python@3.13` first if `python3 --version` says so.
+- **neojac.** Sellbird is written in Jac and built with the `neojac` toolchain, which brings its own Python; `neojac install` fetches the dependencies.
 - **Claude Pro or Max** with the CLI signed in (`claude login`), or a **ChatGPT plan with the Codex CLI** ([Codex setup](docs/codex.md)).
 - **A mailbox to send from**, ideally Google Workspace on a separate sending domain. [Microsoft 365](docs/microsoft365.md) and SMTP work too.
 - **Warmup on that mailbox.** We recommend [TrulyInbox](https://trulyinbox.com/?via=sellbird): it warms a new mailbox before cold email and keeps it out of spam after, and Sellbird reads its inbox rate to tell you when you're ready.
@@ -104,8 +104,8 @@ Then say **"set up Sellbird for me"**. The repo's `CLAUDE.md` turns Claude Code 
 ### Or do it yourself
 
 ```bash
-# 1. Install. Use python3.13, not python3: on macOS bare python3 is 3.9.
-python3.13 -m venv .venv && source .venv/bin/activate && pip install -e .
+# 1. Install and build, then give this shell a `sellbird` command.
+neojac install && neojac build && source scripts/activate.sh
 
 # 2. Add credentials. Every variable is documented inline.
 cp .env.example .env && $EDITOR .env
