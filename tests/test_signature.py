@@ -23,6 +23,7 @@ from sellbird.integrations.signature import (
     signature_problem,
 )
 from email.message import EmailMessage
+from sellbird import paths
 
 
 def png(width=2, height=1) -> bytes:
@@ -74,7 +75,7 @@ def test_logo_is_read_with_its_size(logo):
 def test_relative_logo_is_found_in_the_project_folder(tmp_path, monkeypatch):
     (tmp_path / "assets").mkdir()
     (tmp_path / "assets" / "brand.png").write_bytes(png())
-    monkeypatch.setattr(signature, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(paths, "PROJECT_ROOT", tmp_path)
 
     assert load_signature(config(logo="assets/brand.png")).filename == "brand.png"
 

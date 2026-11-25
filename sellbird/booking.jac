@@ -20,20 +20,13 @@ import from urllib.parse { urlparse }
 
 import pytz;
 
-glob DEFAULT_START: any;
+glob DEFAULT_START: any = time(9, 0);
 
-glob DEFAULT_END: any;
+glob DEFAULT_END: any = time(17, 0);
 
-glob SUGGESTED_TIMES: any;
+glob SUGGESTED_TIMES: any = 3;
 
-glob LOOKAHEAD_DAYS: any;
-
-with entry {
-    DEFAULT_START = time(9, 0);
-    DEFAULT_END = time(17, 0);
-    SUGGESTED_TIMES = 3;
-    LOOKAHEAD_DAYS = 14;
-}
+glob LOOKAHEAD_DAYS: any = 14;
 
 def _parse_clock(value, fallback: time) -> time;
 

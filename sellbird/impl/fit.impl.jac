@@ -101,7 +101,9 @@ impl company_fit(
 
     terms = _hiring_terms(icp);
     roles: any = current_roles(observations);
-    hit: any = next((m for m in (_role_matches(o.get("value_text"), terms) for o in roles) if m), "");
+    hit: any = next(
+        (m for m in (_role_matches(o.get("value_text"), terms) for o in roles) if m), ""
+    );
     if hit {
         score += BUYING;
         reasons.append(f"hiring: {hit}");

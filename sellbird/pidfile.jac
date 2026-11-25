@@ -27,28 +27,17 @@ import time;
 
 import from pathlib { Path }
 
-glob logger: any;
+glob logger: any = logging.getLogger("sellbird.pidfile");
 
-glob PID_FILE: any;
+glob PID_FILE: any = PROJECT_ROOT / "data" / "sellbird.pid";
 
-glob LOCK_FILE: any;
+glob LOCK_FILE: any = PROJECT_ROOT / "data" / "sellbird.lock";
 
-glob _PROCESS_QUERY_LIMITED_INFORMATION: any;
+glob _PROCESS_QUERY_LIMITED_INFORMATION: any = 4096;
 
-glob _STILL_ACTIVE: any;
+glob _STILL_ACTIVE: any = 259;
 
-glob _ERROR_ACCESS_DENIED: any;
-
-with entry {
-    logger = logging.getLogger("sellbird.pidfile");
-
-    PID_FILE = PROJECT_ROOT / "data" / "sellbird.pid";
-    LOCK_FILE = PROJECT_ROOT / "data" / "sellbird.lock";
-
-    _PROCESS_QUERY_LIMITED_INFORMATION = 4096;
-    _STILL_ACTIVE = 259;
-    _ERROR_ACCESS_DENIED = 5;
-}
+glob _ERROR_ACCESS_DENIED: any = 5;
 
 def _pid_alive_windows(pid: builtins.int) -> builtins.bool;
 

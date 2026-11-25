@@ -256,7 +256,7 @@ def test_sellbird_home_config_beats_the_working_directory(tmp_path, monkeypatch)
     (home / "sellbird.yaml").write_text(TRAINED, encoding="utf-8")
     _cwd_with_config(tmp_path, monkeypatch)
     monkeypatch.setenv("SELLBIRD_HOME", str(home))
-    monkeypatch.setattr(config_mod, "PROJECT_ROOT", home)
+    monkeypatch.setattr(paths, "PROJECT_ROOT", home)
     assert Path(config_mod._find_config_file()) == home / "sellbird.yaml"
     (home / "sellbird.local.yaml").write_text(TRAINED, encoding="utf-8")
     assert Path(config_mod._find_config_file()) == home / "sellbird.local.yaml"
@@ -268,7 +268,7 @@ def test_pipx_home_config_beats_the_working_directory(tmp_path, monkeypatch):
     (home / "sellbird.yaml").write_text(TRAINED, encoding="utf-8")
     _cwd_with_config(tmp_path, monkeypatch)
     monkeypatch.delenv("SELLBIRD_HOME", raising=False)
-    monkeypatch.setattr(config_mod, "PROJECT_ROOT", home)
+    monkeypatch.setattr(paths, "PROJECT_ROOT", home)
     assert Path(config_mod._find_config_file()) == home / "sellbird.yaml"
 
 
@@ -277,7 +277,7 @@ def test_missing_home_config_never_falls_back_to_the_working_directory(tmp_path,
     home.mkdir()
     _cwd_with_config(tmp_path, monkeypatch)
     monkeypatch.setenv("SELLBIRD_HOME", str(home))
-    monkeypatch.setattr(config_mod, "PROJECT_ROOT", home)
+    monkeypatch.setattr(paths, "PROJECT_ROOT", home)
     with pytest.raises(config_mod.ConfigFileNotFoundError):
         config_mod._find_config_file()
 
@@ -287,7 +287,7 @@ def test_checkout_still_reads_the_working_directory_first(tmp_path, monkeypatch)
     (checkout / "sellbird.yaml").write_text(TRAINED, encoding="utf-8")
     cwd = _cwd_with_config(tmp_path, monkeypatch)
     monkeypatch.delenv("SELLBIRD_HOME", raising=False)
-    monkeypatch.setattr(config_mod, "PROJECT_ROOT", checkout)
+    monkeypatch.setattr(paths, "PROJECT_ROOT", checkout)
     assert Path(config_mod._find_config_file()) == cwd / "sellbird.local.yaml"
 
 
@@ -297,7 +297,7 @@ def test_docker_app_finds_its_mounted_config(tmp_path, monkeypatch):
     (app / "sellbird.yaml").write_text(TRAINED, encoding="utf-8")
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("SELLBIRD_HOME", str(app))
-    monkeypatch.setattr(config_mod, "PROJECT_ROOT", resolve_home(package_root=app))
+    monkeypatch.setattr(paths, "PROJECT_ROOT", resolve_home(package_root=app))
     assert Path(config_mod._find_config_file()) == (app / "sellbird.yaml").resolve()
 
 
@@ -310,7 +310,6 @@ def test_trained_home_with_env_needs_no_setup(tmp_path, monkeypatch):
     (home / ".env").write_text("X=1\n", encoding="utf-8")
     _cwd_with_config(tmp_path, monkeypatch)            # untrained config in cwd
     monkeypatch.setenv("SELLBIRD_HOME", str(home))
-    monkeypatch.setattr(config_mod, "PROJECT_ROOT", home)
     monkeypatch.setattr(paths, "PROJECT_ROOT", home)
     assert main_mod._needs_setup() is False
 
@@ -321,7 +320,6 @@ def test_untrained_or_missing_home_config_needs_setup(tmp_path, monkeypatch):
     (home / ".env").write_text("X=1\n", encoding="utf-8")
     _cwd_with_config(tmp_path, monkeypatch)
     monkeypatch.setenv("SELLBIRD_HOME", str(home))
-    monkeypatch.setattr(config_mod, "PROJECT_ROOT", home)
     monkeypatch.setattr(paths, "PROJECT_ROOT", home)
     assert main_mod._needs_setup() is True
     (home / "sellbird.yaml").write_text(UNTRAINED, encoding="utf-8")

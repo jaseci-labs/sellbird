@@ -21,14 +21,9 @@ import logging;
 
 import from dataclasses { dataclass, field }
 
-glob logger: any;
+glob logger: any = logging.getLogger("sellbird.pipeline");
 
-glob PROFILE_STALE_DAYS: any;
-
-with entry {
-    logger = logging.getLogger("sellbird.pipeline");
-    PROFILE_STALE_DAYS = 90;
-}
+glob PROFILE_STALE_DAYS: any = 90;
 
 """What a full pass did, stage by stage."""
 @dataclass

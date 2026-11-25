@@ -36,24 +36,24 @@ import os;
 
 import re;
 
-glob logger: any;
+glob logger: any = logging.getLogger("sellbird.handoff");
 
-glob CALL_TIMEOUT: any;
+glob CALL_TIMEOUT: any = 60.0;
 
-glob MAX_RESULT_CHARS: any;
+glob MAX_RESULT_CHARS: any = 2000;
 
-glob _FIELD_RE: any;
+glob _FIELD_RE: any = re.compile("\\{(\\w+)\\}");
 
-glob FIELDS: any;
-
-with entry {
-    logger = logging.getLogger("sellbird.handoff");
-
-    CALL_TIMEOUT = 60.0;
-    MAX_RESULT_CHARS = 2000;
-    _FIELD_RE = re.compile("\\{(\\w+)\\}");
-    FIELDS = ("first_name", "last_name", "email", "title", "company", "website", "reply", "offer");
-}
+glob FIELDS: any = (
+    "first_name",
+    "last_name",
+    "email",
+    "title",
+    "company",
+    "website",
+    "reply",
+    "offer",
+);
 
 def configured(config) -> builtins.bool;
 

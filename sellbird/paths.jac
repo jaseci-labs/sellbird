@@ -35,13 +35,9 @@ glob APP_DIR: any = "sellbird";
     ``.jac/build/``, and a package running from there is that checkout's."""
 def _package_root(module_file: builtins.str) -> Path;
 
-glob PACKAGE_ROOT: any;
+glob PACKAGE_ROOT: any = _package_root(__file__);
 
 glob PROJECT_ROOT: any;
-
-with entry {
-    PACKAGE_ROOT = _package_root(__file__);
-}
 
 """True for a source checkout, never for anything inside site-packages."""
 def is_checkout(package_root: Path) -> builtins.bool;

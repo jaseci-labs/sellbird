@@ -12,18 +12,12 @@ import logging;
 
 import re;
 
-glob _SECRET_PARAM: any;
+glob _SECRET_PARAM: any = re.compile(
+    "([?&][^=&\\s#\\\"'<>]*(?:key|token|secret|password)[^=&\\s#\\\"'<>]*=)[^&\\s#\\\"'<>]+",
+    re.IGNORECASE,
+);
 
-glob MASK: any;
-
-with entry {
-    _SECRET_PARAM = re.compile(
-        "([?&][^=&\\s#\\\"'<>]*(?:key|token|secret|password)[^=&\\s#\\\"'<>]*=)[^&\\s#\\\"'<>]+",
-        re.IGNORECASE,
-    );
-
-    MASK = "***";
-}
+glob MASK: any = "***";
 
 """Mask the values of secret-looking query parameters in text."""
 def redact(text: str) -> str;

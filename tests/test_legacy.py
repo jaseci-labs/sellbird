@@ -71,7 +71,7 @@ def test_never_overwrites_a_file_under_the_new_name(tmp_path):
 def test_waits_while_harvey_is_still_running(tmp_path, monkeypatch):
     _harvey_install(tmp_path)
     (tmp_path / "data" / "harvey.pid").write_text("4242")
-    monkeypatch.setattr("sellbird.pidfile.pid_alive", lambda pid: pid == 4242)
+    monkeypatch.setattr(legacy, "pid_alive", lambda pid: pid == 4242)
 
     notes = legacy.migrate_files(tmp_path)
 
@@ -84,7 +84,7 @@ def test_waits_while_harvey_is_still_running(tmp_path, monkeypatch):
 def test_clears_a_dead_harveys_pidfile(tmp_path, monkeypatch):
     _harvey_install(tmp_path)
     (tmp_path / "data" / "harvey.pid").write_text("4242")
-    monkeypatch.setattr("sellbird.pidfile.pid_alive", lambda pid: False)
+    monkeypatch.setattr(legacy, "pid_alive", lambda pid: False)
 
     legacy.migrate_files(tmp_path)
 
@@ -180,7 +180,7 @@ def test_the_dashboard_shows_the_notice_until_dismissed(client, tmp_path, monkey
     root.mkdir()
     _harvey_install(root)
     legacy.migrate_files(root)
-    monkeypatch.setattr(legacy, "PROJECT_ROOT", root)
+    monkeypatch.setattr("sellbird.paths.PROJECT_ROOT", root)
     assert client.get("/api/rename-notice").json() == {"show": True}
     assert client.post("/api/rename-notice/dismiss").json()["success"]
     assert client.get("/api/rename-notice").json() == {"show": False}

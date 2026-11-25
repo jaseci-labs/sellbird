@@ -15,11 +15,7 @@ import sys;
 
 import from pathlib { Path }
 
-glob logger: any;
-
-with entry {
-    logger = logging.getLogger("sellbird.textio");
-}
+glob logger: any = logging.getLogger("sellbird.textio");
 
 """A file a person or an older Sellbird may have saved (sellbird.yaml, .env,
     skills, prompts): UTF-8, with or without a BOM, else the locale's code

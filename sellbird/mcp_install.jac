@@ -138,20 +138,15 @@ def _claude_cli_argv(
     claude: builtins.str, verb: builtins.str, `entry: builtins.dict | None = None
 ) -> any;
 
-glob which_default_: any;
+glob which_default_: any = shutil.which;
 
-glob runner_default_: any;
+glob runner_default_: any = subprocess.run;
 
 glob _BARE_KEY: any;
 
 glob _HEADER: any;
 
 glob _OUR_HEADER: any;
-
-with entry {
-    which_default_ = shutil.which;
-    runner_default_ = subprocess.run;
-}
 
 """What installing for Claude Code would do. Reads only; never runs `claude`."""
 def plan_claude(*, home: Path, which=which_default_, runner=runner_default_) -> PlannedChange;

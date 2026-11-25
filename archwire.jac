@@ -1627,6 +1627,8 @@ graph import {
     sellbird ++> harvey.cli;
     sellbird.cli ++> harvey.cli { main as sellbird_main }
     harvey.cli ++> harvey.__main__ { main }
+    sellbird.paths --> tests.test_signature;
+    sellbird.paths --> tests.test_writer_email_rules;
 }
 
 graph spaces {

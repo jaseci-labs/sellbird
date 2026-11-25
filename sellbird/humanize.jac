@@ -28,29 +28,20 @@ import re;
 
 import from pathlib { Path }
 
-glob logger: any;
+glob logger: any = logging.getLogger("sellbird.humanize");
 
-glob SKILL_PATH: any;
+glob SKILL_PATH: any = Path(
+    os.getenv(
+        "SELLBIRD_HUMANIZER_SKILL",
+        `str(Path.home() / ".claude" / "skills" / "humanizer" / "SKILL.md"),
+    ),
+);
 
-glob MERGE_VAR: any;
+glob MERGE_VAR: any = re.compile("\\{\\{\\s*\\w+\\s*\\}\\}");
 
-glob MAX_GROWTH_WORDS: any;
+glob MAX_GROWTH_WORDS: any = 2;
 
-glob META_PREFIXES: any;
-
-with entry {
-    logger = logging.getLogger("sellbird.humanize");
-
-    SKILL_PATH = Path(
-        os.getenv(
-            "SELLBIRD_HUMANIZER_SKILL",
-            `str(Path.home() / ".claude" / "skills" / "humanizer" / "SKILL.md"),
-        ),
-    );
-    MERGE_VAR = re.compile("\\{\\{\\s*\\w+\\s*\\}\\}");
-    MAX_GROWTH_WORDS = 2;
-    META_PREFIXES = ("i can't", "i cannot", "as an ai", "sorry,", "here is", "here's");
-}
+glob META_PREFIXES: any = ("i can't", "i cannot", "as an ai", "sorry,", "here is", "here's");
 
 """True only when the operator turned the pass on in sellbird.yaml."""
 def humanizer_enabled(config) -> builtins.bool;

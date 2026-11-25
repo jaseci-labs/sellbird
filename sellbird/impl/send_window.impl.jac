@@ -113,8 +113,9 @@ impl zone_country(zone: builtins.str) -> builtins.str {
 impl _one_offset(zones: builtins.list[builtins.str]) -> builtins.bool {
     year: any;
     year = datetime.now().year;
+    days: any = [datetime(year, 1, 15, 12), datetime(year, 7, 15, 12)];
     seen: any = {
-        `tuple(pytz.timezone(z).utcoffset(datetime(year, month, 15, 12)) for month in (1, 7))
+        (pytz.timezone(z).utcoffset(days[0]), pytz.timezone(z).utcoffset(days[1]))
         for z in zones
     };
     return operator.eq(len(seen), 1);

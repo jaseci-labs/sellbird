@@ -35,47 +35,93 @@ import from pydantic {
     model_validator,
 }
 
-glob logger: any;
+glob logger: any = logging.getLogger("sellbird.config");
 
-glob PRECLEARED_ADDRESS_SOURCES: any;
+glob PRECLEARED_ADDRESS_SOURCES: any = ("published", "bought", "scraped", "given", "unknown");
 
-glob PRECLEARED_SENDER_COUNTRIES: any;
+glob PRECLEARED_SENDER_COUNTRIES: any = (
+    "GB",
+    "US",
+    "CA",
+    "DE",
+    "FR",
+    "AU",
+    "IE",
+    "NL",
+    "ES",
+    "IT",
+    "LV",
+    "AE",
+    "EG",
+    "QA",
+);
 
-glob COUNTRY_ALIASES: any;
+glob COUNTRY_ALIASES: any = {"UK": "GB", "USA": "US", "UAE": "AE"};
 
-glob DEFAULT_OPT_OUT_LINE: any;
+glob DEFAULT_OPT_OUT_LINE: any = "Not interested? Just let me know and I won't email you again.";
 
-glob PREVIOUS_DEFAULT_OPT_OUT_LINE: any;
+glob PREVIOUS_DEFAULT_OPT_OUT_LINE: any = "Not interested? Reply \"no thanks\" and I won't email again.";
 
-glob OPT_OUT_WORDS: any;
+glob OPT_OUT_WORDS: any = (
+    "no thanks",
+    "no thank you",
+    "unsubscribe",
+    "stop",
+    "remove me",
+    "opt out",
+);
 
-glob HEBREW_OPT_OUT_WORDS: any;
+glob HEBREW_OPT_OUT_WORDS: any = ("הסר", "הסירו", "הסרה", "לא תודה", "הסירו אותי", "תורידו אותי");
 
-glob SPANISH_OPT_OUT_WORDS: any;
+glob SPANISH_OPT_OUT_WORDS: any = ("no gracias", "baja", "darme de baja");
 
-glob FRENCH_OPT_OUT_WORDS: any;
+glob FRENCH_OPT_OUT_WORDS: any = (
+    "non merci",
+    "non, merci",
+    "arrêt",
+    "désabonner",
+    "désabonnement",
+    "désabonnez-moi",
+    "retirez-moi",
+);
 
-glob _SAYS_IT_STOPS_RE: any;
+glob _SAYS_IT_STOPS_RE: any = re.compile(
+    "\\b(?:stop|unsubscribe|opt[\\s-]?out|remove|no\\s+thanks|not\\s+interested|leave\\s+you\\s+(?:be|alone)|take\\s+you\\s+off|off\\s+(?:my|our|the)\\s+list|hear\\s+from\\s+(?:me|us)|no\\s+more\\s+e-?mails?|won[\\'’]?t\\s+(?:\\w+\\s+){0,2}(?:e-?mail|write|contact|reach|bother|follow|message|send)|(?:not|never)\\s+(?:\\w+\\s+){0,2}(?:e-?mail|contact|write|message)\\w*\\s+(?:you\\s+)?again)",
+    re.IGNORECASE,
+);
 
-glob _SAYS_IT_STOPS_HE_RE: any;
+glob _SAYS_IT_STOPS_HE_RE: any = re.compile(
+    "(?:הסר|להסיר|הסירו|הסרה|נסיר|לא,?\\s+תודה|להפסיק|אפסיק|תורידו|לא\\s+אפנה|לא\\s+אכתוב|לא\\s+אשלח)",
+);
 
-glob _SAYS_IT_STOPS_ES_RE: any;
+glob _SAYS_IT_STOPS_ES_RE: any = re.compile(
+    "(?:\\bbaja\\b|no,?\\s+gracias|dejar[ée]?\\s+de|dejo\\s+de|no\\s+(?:le|te|les)\\s+(?:escribir|volver|molestar)|no\\s+volver[ée]|eliminar|quitar|\\bparar\\b)",
+    re.IGNORECASE,
+);
 
-glob _SAYS_IT_STOPS_IT_RE: any;
+glob _SAYS_IT_STOPS_IT_RE: any = re.compile(
+    "(?:\\bnon\\s+(?:ti|vi|le)\\s+(?:scriver[òo]|scrivo|contatter[òo]|contatto|disturber[òo]|disturbo|mander[òo]|mando|invier[òo]|invio)\\b|\\bnon\\s+(?:ricever\\w*|vuoi\\s+ricevere|volete\\s+ricevere)\\b|\\b(?:disiscri\\w+|rimuov\\w+|rimozione|cancell\\w+|togli\\w+)|\\bannull\\w*\\s+l[’']?\\s*iscrizione|\\bsmetto\\s+di\\b|\\bsmetter[òo]\\s+di\\b|\\bnon\\s+(?:ti\\s+|vi\\s+|le\\s+)?interess\\w+|\\bnon\\s+interessat\\w+|\\bstop\\b)",
+    re.IGNORECASE,
+);
 
-glob _SAYS_IT_STOPS_FR_RE: any;
+glob _SAYS_IT_STOPS_FR_RE: any = re.compile(
+    "(?:desabonn|desinscri|\\barret(?:e|er|ez|erai|erons)?\\b|\\bnon,?\\s+merci\\b|\\bpas\\s+interess|\\bn(?:e\\s+|')(?:vous\\s+|t'|te\\s+)?(?:ecri|contact|relanc|envo|enverr|derang|sollicit|importun|recevr)\\w*\\s+(?:plus|jamais|pas\\s+(?:a|de)\\s+nouveau)\\b|\\bne\\s+plus\\s+(?:jamais\\s+)?(?:vous\\s+|t'|te\\s+|m'|me\\s+)?(?:ecrire|contacter|relancer|recevoir|solliciter|deranger|etre\\s+(?:contacte|sollicite|relance))|\\bne\\s+(?:voulez|souhaitez|desirez|veux|veut)\\s+(?:plus|pas)\\s+(?:\\w+\\s+){0,2}?(?:recevoir|courriels?|messages?|nouvelles)|\\b(?:retir|enlev|supprim|ray)\\w*\\s+(?:\\w+\\s+){0,3}?(?:de|d'|des)\\s*(?:(?:la|ma|notre|votre|vos|nos|mes|cette|ses)\\s+)?(?:listes?|envois?|base|infolettre|courriels)|\\blaiss\\w*\\s+tranquilles?|\\bplus\\s+(?:jamais\\s+)?(?:de\\s+)?(?:courriels?|messages?|nouvelles)\\s+de\\s+(?:ma|notre)\\s+part)",
+    re.IGNORECASE,
+);
 
-glob _FRENCH_CLICK_RE: any;
+glob _FRENCH_CLICK_RE: any = re.compile("\\bcliqu(?:ez|er|e)\\b", re.IGNORECASE);
 
-glob _HEBREW_CLICK_RE: any;
+glob _HEBREW_CLICK_RE: any = re.compile(
+    "(?<!\\w)ו?(?:לחצו|לחצי|לחץ\\s+(?:כאן|על)|הקליקו|הקליקי|הקלק)(?!\\w)"
+);
 
-glob BRAIN_PROVIDERS: any;
+glob BRAIN_PROVIDERS: any = ("claude", "codex");
 
-glob CODEX_REASONING_EFFORTS: any;
+glob CODEX_REASONING_EFFORTS: any = ("minimal", "low", "medium", "high", "xhigh");
 
-glob _MODEL_NAME_RE: any;
+glob _MODEL_NAME_RE: any = re.compile("^[A-Za-z0-9][A-Za-z0-9._:/\\[\\]-]{0,127}$");
 
-glob MAX_EMAIL_RULES_CHARS: any;
+glob MAX_EMAIL_RULES_CHARS: any = 20000;
 
 glob _CURRENT_CONFIG: ContextVar["SellbirdConfig | None"];
 
@@ -87,10 +133,6 @@ glob _mode_cache: builtins.dict[builtins.str, builtins.tuple[builtins.tuple, bui
 
 glob _dnc_cache: builtins.dict[builtins.str, builtins.tuple[builtins.tuple, builtins.list[builtins.str]
     | None]];
-
-with entry {
-    logger = logging.getLogger("sellbird.config");
-}
 
 """Raised when Sellbird's configuration is missing or invalid."""
 obj ConfigError(Exception) {
@@ -359,27 +401,6 @@ class ChannelsConfig(BaseModel) {
     has linkedin: LinkedInChannelConfig = LinkedInChannelConfig();
 }
 
-with entry {
-    PRECLEARED_ADDRESS_SOURCES = ("published", "bought", "scraped", "given", "unknown");
-    PRECLEARED_SENDER_COUNTRIES = (
-        "GB",
-        "US",
-        "CA",
-        "DE",
-        "FR",
-        "AU",
-        "IE",
-        "NL",
-        "ES",
-        "IT",
-        "LV",
-        "AE",
-        "EG",
-        "QA",
-    );
-    COUNTRY_ALIASES = {"UK": "GB", "USA": "US", "UAE": "AE"};
-}
-
 """A two-letter country code ("us" -> "US", "UK" -> "GB"), or "" for none.
 
     Raises ValueError on anything else, including the booleans YAML makes of
@@ -421,52 +442,9 @@ class PreclearedConfig(BaseModel) {
     def _country_when_enabled -> any;
 }
 
-with entry {
-    DEFAULT_OPT_OUT_LINE = "Not interested? Just let me know and I won't email you again.";
-    PREVIOUS_DEFAULT_OPT_OUT_LINE = "Not interested? Reply \"no thanks\" and I won't email again.";
-    OPT_OUT_WORDS = ("no thanks", "no thank you", "unsubscribe", "stop", "remove me", "opt out");
-    HEBREW_OPT_OUT_WORDS = ("הסר", "הסירו", "הסרה", "לא תודה", "הסירו אותי", "תורידו אותי");
-    SPANISH_OPT_OUT_WORDS = ("no gracias", "baja", "darme de baja");
-    FRENCH_OPT_OUT_WORDS = (
-        "non merci",
-        "non, merci",
-        "arrêt",
-        "désabonner",
-        "désabonnement",
-        "désabonnez-moi",
-        "retirez-moi",
-    );
-    _SAYS_IT_STOPS_RE = re.compile(
-        "\\b(?:stop|unsubscribe|opt[\\s-]?out|remove|no\\s+thanks|not\\s+interested|leave\\s+you\\s+(?:be|alone)|take\\s+you\\s+off|off\\s+(?:my|our|the)\\s+list|hear\\s+from\\s+(?:me|us)|no\\s+more\\s+e-?mails?|won[\\'’]?t\\s+(?:\\w+\\s+){0,2}(?:e-?mail|write|contact|reach|bother|follow|message|send)|(?:not|never)\\s+(?:\\w+\\s+){0,2}(?:e-?mail|contact|write|message)\\w*\\s+(?:you\\s+)?again)",
-        re.IGNORECASE,
-    );
-    _SAYS_IT_STOPS_HE_RE = re.compile(
-        "(?:הסר|להסיר|הסירו|הסרה|נסיר|לא,?\\s+תודה|להפסיק|אפסיק|תורידו|לא\\s+אפנה|לא\\s+אכתוב|לא\\s+אשלח)",
-    );
-    _SAYS_IT_STOPS_ES_RE = re.compile(
-        "(?:\\bbaja\\b|no,?\\s+gracias|dejar[ée]?\\s+de|dejo\\s+de|no\\s+(?:le|te|les)\\s+(?:escribir|volver|molestar)|no\\s+volver[ée]|eliminar|quitar|\\bparar\\b)",
-        re.IGNORECASE,
-    );
-    _SAYS_IT_STOPS_IT_RE = re.compile(
-        "(?:\\bnon\\s+(?:ti|vi|le)\\s+(?:scriver[òo]|scrivo|contatter[òo]|contatto|disturber[òo]|disturbo|mander[òo]|mando|invier[òo]|invio)\\b|\\bnon\\s+(?:ricever\\w*|vuoi\\s+ricevere|volete\\s+ricevere)\\b|\\b(?:disiscri\\w+|rimuov\\w+|rimozione|cancell\\w+|togli\\w+)|\\bannull\\w*\\s+l[’']?\\s*iscrizione|\\bsmetto\\s+di\\b|\\bsmetter[òo]\\s+di\\b|\\bnon\\s+(?:ti\\s+|vi\\s+|le\\s+)?interess\\w+|\\bnon\\s+interessat\\w+|\\bstop\\b)",
-        re.IGNORECASE,
-    );
-    _SAYS_IT_STOPS_FR_RE = re.compile(
-        "(?:desabonn|desinscri|\\barret(?:e|er|ez|erai|erons)?\\b|\\bnon,?\\s+merci\\b|\\bpas\\s+interess|\\bn(?:e\\s+|')(?:vous\\s+|t'|te\\s+)?(?:ecri|contact|relanc|envo|enverr|derang|sollicit|importun|recevr)\\w*\\s+(?:plus|jamais|pas\\s+(?:a|de)\\s+nouveau)\\b|\\bne\\s+plus\\s+(?:jamais\\s+)?(?:vous\\s+|t'|te\\s+|m'|me\\s+)?(?:ecrire|contacter|relancer|recevoir|solliciter|deranger|etre\\s+(?:contacte|sollicite|relance))|\\bne\\s+(?:voulez|souhaitez|desirez|veux|veut)\\s+(?:plus|pas)\\s+(?:\\w+\\s+){0,2}?(?:recevoir|courriels?|messages?|nouvelles)|\\b(?:retir|enlev|supprim|ray)\\w*\\s+(?:\\w+\\s+){0,3}?(?:de|d'|des)\\s*(?:(?:la|ma|notre|votre|vos|nos|mes|cette|ses)\\s+)?(?:listes?|envois?|base|infolettre|courriels)|\\blaiss\\w*\\s+tranquilles?|\\bplus\\s+(?:jamais\\s+)?(?:de\\s+)?(?:courriels?|messages?|nouvelles)\\s+de\\s+(?:ma|notre)\\s+part)",
-        re.IGNORECASE,
-    );
-    _FRENCH_CLICK_RE = re.compile("\\bcliqu(?:ez|er|e)\\b", re.IGNORECASE);
-}
-
 """Latin accents dropped and curly apostrophes made straight, so French
     reads the same typed with or without them."""
 def _fold_accents(text: builtins.str) -> builtins.str;
-
-with entry {
-    _HEBREW_CLICK_RE = re.compile(
-        "(?<!\\w)ו?(?:לחצו|לחצי|לחץ\\s+(?:כאן|על)|הקליקו|הקליקי|הקלק)(?!\\w)"
-    );
-}
 
 class ComplianceConfig(BaseModel) {
     has precleared: PreclearedConfig = PreclearedConfig();
@@ -539,12 +517,6 @@ class UsageConfig(BaseModel) {
     class def _valid_interval(v: builtins.int) -> builtins.int;
 }
 
-with entry {
-    BRAIN_PROVIDERS = ("claude", "codex");
-    CODEX_REASONING_EFFORTS = ("minimal", "low", "medium", "high", "xhigh");
-    _MODEL_NAME_RE = re.compile("^[A-Za-z0-9][A-Za-z0-9._:/\\[\\]-]{0,127}$");
-}
-
 """Which subscription Sellbird thinks with.
 
     ``claude`` (default) runs Claude Code headless on your Claude plan.
@@ -584,10 +556,6 @@ class WriterConfig(BaseModel) {
     @field_validator("email_rules", mode="before")
     @builtins.classmethod
     class def _blank_rules(v) -> any;
-}
-
-with entry {
-    MAX_EMAIL_RULES_CHARS = 20000;
 }
 
 """writer.email_rules names a file Sellbird can't use."""

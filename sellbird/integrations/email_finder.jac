@@ -45,7 +45,7 @@ import aiosmtplib;
 
 import httpx;
 
-glob logger: any;
+glob logger: any = logging.getLogger("sellbird.email_finder");
 
 glob _mx_cache: builtins.dict[builtins.str, Optional[builtins.str]];
 
@@ -66,7 +66,6 @@ glob ROLE_LOCALS: any;
 glob HUNTER_FREE_MONTHLY_SEARCHES: any;
 
 with entry {
-    logger = logging.getLogger("sellbird.email_finder");
     _mx_cache = {};
 
     API_TIMEOUT = httpx.Timeout(connect=10.0, read=20.0, write=10.0, pool=10.0);

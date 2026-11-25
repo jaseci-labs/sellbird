@@ -36,14 +36,9 @@ glob MAX_LOGO_BYTES: any = 100000;
 
 glob MAX_LOGO_PIXELS: any = 20000;
 
-glob _URL: any;
+glob _URL: any = re.compile("https?://[!#-;=?-~]+");
 
-glob _URL_TRAILING: any;
-
-with entry {
-    _URL = re.compile("https?://[!#-;=?-~]+");
-    _URL_TRAILING = ".,;:!?)]}'";
-}
+glob _URL_TRAILING: any = ".,;:!?)]}'";
 
 obj SignatureError(ValueError) {
     def __repr__ -> str;

@@ -42,32 +42,21 @@ import from importlib.metadata { entry_points }
 
 import from typing { Any }
 
-glob logger: any;
+glob logger: any = logging.getLogger(__name__);
 
-glob ENTRY_POINT_GROUP: any;
+glob ENTRY_POINT_GROUP: any = "sellbird.extensions";
 
-glob _NAME: any;
+glob _NAME: any = re.compile("^[a-z][a-z0-9_.-]{0,63}$");
 
-glob TICK_STEP_TIMEOUT_SECONDS: any;
+glob TICK_STEP_TIMEOUT_SECONDS: any = 120.0;
 
-glob TickStep: any;
+glob TickStep: any = Callable[["TickContext"], Awaitable[None]];
 
-glob ConfigureCommand: any;
+glob ConfigureCommand: any = Callable[[argparse.ArgumentParser], Callable[[
+    argparse.Namespace,
+], Any]];
 
-glob _REGISTRY: any;
-
-glob _LOADED: any;
-
-with entry {
-    logger = logging.getLogger(__name__);
-
-    ENTRY_POINT_GROUP = "sellbird.extensions";
-    _NAME = re.compile("^[a-z][a-z0-9_.-]{0,63}$");
-    TICK_STEP_TIMEOUT_SECONDS = 120.0;
-
-    TickStep = Callable[["TickContext"], Awaitable[None]];
-    ConfigureCommand = Callable[[argparse.ArgumentParser], Callable[[argparse.Namespace], Any]];
-}
+glob _LOADED: any = False;
 
 """An extension couldn't be installed, or asked for something invalid."""
 obj ExtensionError(RuntimeError) {
@@ -144,12 +133,13 @@ class Registry {
     def add_mailbox_connection(connection: str, build) -> None;
 }
 
-def _check_name(name: str, what: str) -> None;
+glob _REGISTRY: any;
 
 with entry {
     _REGISTRY = Registry();
-    _LOADED = False;
 }
+
+def _check_name(name: str, what: str) -> None;
 
 """The process's registry, with every installed extension loaded."""
 def registry -> Registry;

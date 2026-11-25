@@ -11,20 +11,12 @@ import builtins;
 
 import logging;
 
-glob logger: any;
+glob logger: any = logging.getLogger("sellbird.sending_mode");
 
-glob SIGNATURE_HOLD_PREFIX: any;
-
-with entry {
-    logger = logging.getLogger("sellbird.sending_mode");
-}
+glob SIGNATURE_HOLD_PREFIX: any = "email signature: ";
 
 """Bring ``config`` in line with its file. True when the mode changed."""
 async def sync_sending_mode(config, state) -> builtins.bool;
-
-with entry {
-    SIGNATURE_HOLD_PREFIX = "email signature: ";
-}
 
 """What Today and `sellbird status` say while sending is held because
     replies couldn't all be read or handled: (title, detail)."""

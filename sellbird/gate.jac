@@ -59,55 +59,74 @@ glob MAX_BODY_WORDS: any = 220;
 
 glob MAX_LINKS: any = 1;
 
-glob EMAIL_RE: any;
+glob EMAIL_RE: any = re.compile("^[A-Za-z0-9._%+\\-]+@[A-Za-z0-9.\\-]+\\.[A-Za-z]{2,}$");
 
-glob MERGE_TAG_RE: any;
+glob MERGE_TAG_RE: any = re.compile("\\{\\{\\s*\\w+\\s*\\}\\}|\\{\\s*\\w+\\s*\\}(?!\\})");
 
-glob URL_RE: any;
+glob URL_RE: any = re.compile("https?://\\S+", re.IGNORECASE);
 
-glob DELIVERABLE_STATUSES: any;
+glob DELIVERABLE_STATUSES: any = {"verified", "risky"};
 
-glob _INVISIBLE_RE: any;
+glob _INVISIBLE_RE: any = re.compile("[­​-‍⁠﻿]");
 
-glob _DNC_DOMAIN_RE: any;
+glob _DNC_DOMAIN_RE: any = re.compile(
+    "^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z0-9-]{2,63}$"
+);
 
-glob _DNC_LOCAL_RE: any;
+glob _DNC_LOCAL_RE: any = re.compile("^[a-z0-9._%+'-]+$");
 
-glob _FILE_ENDINGS: any;
+glob _FILE_ENDINGS: any = frozenset(
+    "\n    js ts pdf png jpg jpeg gif svg webp heic txt csv doc docx xls xlsx ppt pptx key pages\n    json yaml yml toml xml html htm css exe dmg msi bat ini cfg mp3 mp4 wav\n".split(),
+);
 
-glob _KNOWN_ENDINGS: any;
+glob _KNOWN_ENDINGS: any = frozenset(
+    "\n    com net org info biz name pro mobi asia tel xxx io ai app dev xyz site online store shop\n    tech cloud page agency studio digital email live life media news blog club world today\n    one link click top icu buzz win bid loan work fun space website host press services\n    solutions company business center group network systems software tools zone works sale\n    deals plus vip best ltd inc llc gmbh zip mov cfd sbs cyou rest bar beauty hair skin\n    love sexy porn casino bet poker game games bio eco green energy solar money cash pay\n    finance capital fund trade market markets exchange loans credit insurance legal law\n    health care clinic dental doctor coach academy school university courses training jobs\n    careers events tickets travel tours hotel homes house realty estate properties land\n    gov edu mil int test example invalid localhost onion\n".split(),
+);
 
-glob _ENDINGS_RE: any;
+glob _ENDINGS_RE: any = "|".join(sorted(_KNOWN_ENDINGS, key=builtins.len, reverse=True));
 
-glob _ZERO_WIDTH_RE: any;
+glob _ZERO_WIDTH_RE: any = re.compile("[​-‏⁠﻿]");
 
-glob _DOT_FORMS_RE: any;
+glob _DOT_FORMS_RE: any = re.compile("\\s*[\\[({]\\s*(?:\\.|dot)\\s*[\\])}]\\s*", re.IGNORECASE);
 
-glob _SPOKEN_DOT_RE: any;
+glob _SPOKEN_DOT_RE: any = re.compile(
+    f"(?<=\\w\\w)\\s+dot\\s+(?=(?:{_ENDINGS_RE}|[a-z]{{2}})\\b)", re.IGNORECASE
+);
 
-glob _SPACED_DOT_RE: any;
+glob _SPACED_DOT_RE: any = re.compile(
+    f"(?<=\\w)\\s+\\.\\s*(?=(?:{_ENDINGS_RE})\\b|[^\\W\\d_]{{2,24}}/)", re.IGNORECASE
+);
 
-glob _SCHEME_URL_RE: any;
+glob _SCHEME_URL_RE: any = re.compile("\\b[a-z][a-z0-9+.-]*://[^\\s<>\\\"']+", re.IGNORECASE);
 
-glob _EMAIL_HOST_RE: any;
+glob _EMAIL_HOST_RE: any = re.compile(
+    "(?:[\\w.%+\\-]+|\\\"[^\\\"\\n]*\\\"|“[^”\\n]*”)?@((?:[^\\W_][\\w-]*\\.)+[^\\W\\d_]{2,})"
+);
 
-glob _HOST_OK_RE: any;
+glob _HOST_OK_RE: any = re.compile("^[^\\W_](?:[\\w.-]*[^\\W_])?$");
 
-glob UNREADABLE_LINK: any;
+glob UNREADABLE_LINK: any = "link that can't be read";
 
-glob _IP_RE: any;
+glob _IP_RE: any = re.compile("(?<![\\w.])\\d{1,3}(?:\\.\\d{1,3}){3}(?![\\w.])");
 
-glob _BARE_RE: any;
+glob _BARE_RE: any = re.compile(
+    "(?<![\\w@.])((?:[^\\W_](?:[\\w-]{0,61}[^\\W_])?\\.)+([^\\W\\d_]{2,24}))(?![\\w-])([/?#][^\\s<>\\\"']*)?",
+);
 
-glob _SAY_ALOUD_FILES: any;
+glob _SAY_ALOUD_FILES: any = frozenset({
+    "email_frameworks.md",
+    "product_knowledge.md",
+    "objection_handling.md",
+    "README.md",
+});
 
-glob LEAK_RUN_WORDS: any;
+glob LEAK_RUN_WORDS: any = 12;
 
-glob _WORD_RE: any;
+glob _WORD_RE: any = re.compile("[a-z0-9']+");
 
-glob _SCRIPT_LINE_RE: any;
+glob _SCRIPT_LINE_RE: any = re.compile("^\\s*(?:[-*]\\s*)?(?:>|[\\\"“'‘])");
 
-glob _QUOTED_RE: any;
+glob _QUOTED_RE: any = re.compile("\"[^\"\\n]{12,}\"|“[^”\\n]{12,}”");
 
 glob _leak_cache: builtins.dict;
 
@@ -117,14 +136,6 @@ glob _ISO_DATE_RE: any;
 
 glob _PAYMENT_RE: any;
 
-with entry {
-    EMAIL_RE = re.compile("^[A-Za-z0-9._%+\\-]+@[A-Za-z0-9.\\-]+\\.[A-Za-z]{2,}$");
-    MERGE_TAG_RE = re.compile("\\{\\{\\s*\\w+\\s*\\}\\}|\\{\\s*\\w+\\s*\\}(?!\\})");
-    URL_RE = re.compile("https?://\\S+", re.IGNORECASE);
-
-    DELIVERABLE_STATUSES = {"verified", "risky"};
-}
-
 @dataclass
 class GateResult {
     has ok: builtins.bool;
@@ -132,12 +143,6 @@ class GateResult {
     has reasons: builtins.list[builtins.str] = field(default_factory=list[any]);
 
     def __bool__ -> bool;
-}
-
-with entry {
-    _INVISIBLE_RE = re.compile("[­​-‍⁠﻿]");
-    _DNC_DOMAIN_RE = re.compile("^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z0-9-]{2,63}$");
-    _DNC_LOCAL_RE = re.compile("^[a-z0-9._%+'-]+$");
 }
 
 def _clean_text(raw) -> builtins.str;
@@ -205,34 +210,6 @@ def pre_send_check(
     do_not_contact=(),
 ) -> GateResult;
 
-with entry {
-    _FILE_ENDINGS = frozenset(
-        "\n    js ts pdf png jpg jpeg gif svg webp heic txt csv doc docx xls xlsx ppt pptx key pages\n    json yaml yml toml xml html htm css exe dmg msi bat ini cfg mp3 mp4 wav\n".split(),
-    );
-    _KNOWN_ENDINGS = frozenset(
-        "\n    com net org info biz name pro mobi asia tel xxx io ai app dev xyz site online store shop\n    tech cloud page agency studio digital email live life media news blog club world today\n    one link click top icu buzz win bid loan work fun space website host press services\n    solutions company business center group network systems software tools zone works sale\n    deals plus vip best ltd inc llc gmbh zip mov cfd sbs cyou rest bar beauty hair skin\n    love sexy porn casino bet poker game games bio eco green energy solar money cash pay\n    finance capital fund trade market markets exchange loans credit insurance legal law\n    health care clinic dental doctor coach academy school university courses training jobs\n    careers events tickets travel tours hotel homes house realty estate properties land\n    gov edu mil int test example invalid localhost onion\n".split(),
-    );
-    _ENDINGS_RE = "|".join(sorted(_KNOWN_ENDINGS, key=builtins.len, reverse=True));
-    _ZERO_WIDTH_RE = re.compile("[​-‏⁠﻿]");
-    _DOT_FORMS_RE = re.compile("\\s*[\\[({]\\s*(?:\\.|dot)\\s*[\\])}]\\s*", re.IGNORECASE);
-    _SPOKEN_DOT_RE = re.compile(
-        f"(?<=\\w\\w)\\s+dot\\s+(?=(?:{_ENDINGS_RE}|[a-z]{{2}})\\b)", re.IGNORECASE
-    );
-    _SPACED_DOT_RE = re.compile(
-        f"(?<=\\w)\\s+\\.\\s*(?=(?:{_ENDINGS_RE})\\b|[^\\W\\d_]{{2,24}}/)", re.IGNORECASE
-    );
-    _SCHEME_URL_RE = re.compile("\\b[a-z][a-z0-9+.-]*://[^\\s<>\\\"']+", re.IGNORECASE);
-    _EMAIL_HOST_RE = re.compile(
-        "(?:[\\w.%+\\-]+|\\\"[^\\\"\\n]*\\\"|“[^”\\n]*”)?@((?:[^\\W_][\\w-]*\\.)+[^\\W\\d_]{2,})"
-    );
-    _HOST_OK_RE = re.compile("^[^\\W_](?:[\\w.-]*[^\\W_])?$");
-    UNREADABLE_LINK = "link that can't be read";
-    _IP_RE = re.compile("(?<![\\w.])\\d{1,3}(?:\\.\\d{1,3}){3}(?![\\w.])");
-    _BARE_RE = re.compile(
-        "(?<![\\w@.])((?:[^\\W_](?:[\\w-]{0,61}[^\\W_])?\\.)+([^\\W\\d_]{2,24}))(?![\\w-])([/?#][^\\s<>\\\"']*)?",
-    );
-}
-
 """The text as a reader's browser or eye takes it: fullwidth and other
     lookalike dots become dots, hidden characters go, "evil[.]com" and
     "evil dot com" become evil.com."""
@@ -267,16 +244,6 @@ def _is_booking_page(link: builtins.str, prefix: builtins.str) -> builtins.bool;
 def _shown(host: builtins.str, link: builtins.str, prefix: builtins.str) -> builtins.str;
 
 with entry {
-    _SAY_ALOUD_FILES = frozenset({
-        "email_frameworks.md",
-        "product_knowledge.md",
-        "objection_handling.md",
-        "README.md",
-    });
-    LEAK_RUN_WORDS = 12;
-    _WORD_RE = re.compile("[a-z0-9']+");
-    _SCRIPT_LINE_RE = re.compile("^\\s*(?:[-*]\\s*)?(?:>|[\\\"“'‘])");
-    _QUOTED_RE = re.compile("\"[^\"\\n]{12,}\"|“[^”\\n]{12,}”");
     _leak_cache = {};
 }
 

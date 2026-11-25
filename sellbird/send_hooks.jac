@@ -35,21 +35,31 @@ import from dataclasses { dataclass }
 
 import from typing { Any }
 
-glob logger: any;
+glob logger: any = logging.getLogger("sellbird.send_hooks");
 
-glob SendRule: any;
+glob HeaderHook: any = Callable[[dict[any, any]], Iterable[builtins.tuple[str, str]]];
 
-glob HeaderHook: any;
+glob RESERVED_HEADERS: any = frozenset({
+    "from",
+    "to",
+    "cc",
+    "bcc",
+    "subject",
+    "date",
+    "message-id",
+    "in-reply-to",
+    "references",
+    "reply-to",
+    "sender",
+    "return-path",
+    "mime-version",
+    "content-type",
+    "content-transfer-encoding",
+});
 
-glob RESERVED_HEADERS: any;
+glob _HEADER_NAME: any = re.compile("^[A-Za-z0-9-]{1,76}$");
 
-glob _HEADER_NAME: any;
-
-glob NO_HEADERS_HOLD: any;
-
-with entry {
-    logger = logging.getLogger("sellbird.send_hooks");
-}
+glob NO_HEADERS_HOLD: any = "this inbox can't carry the headers this email needs";
 
 """One email about to go out, as a send rule sees it."""
 @dataclass(frozen=True)
@@ -69,6 +79,12 @@ class SendCheck {
     }
 }
 
+glob SendRule: any;
+
+with entry {
+    SendRule = Callable[[SendCheck], Awaitable["Hold | Cancel | None"]];
+}
+
 """Not now: the email stays approved and is tried again next cycle."""
 @dataclass(frozen=True)
 class Hold {
@@ -79,30 +95,6 @@ class Hold {
 @dataclass(frozen=True)
 class Cancel {
     has reason: str;
-}
-
-with entry {
-    SendRule = Callable[[SendCheck], Awaitable["Hold | Cancel | None"]];
-    HeaderHook = Callable[[dict[any, any]], Iterable[builtins.tuple[str, str]]];
-    RESERVED_HEADERS = frozenset({
-        "from",
-        "to",
-        "cc",
-        "bcc",
-        "subject",
-        "date",
-        "message-id",
-        "in-reply-to",
-        "references",
-        "reply-to",
-        "sender",
-        "return-path",
-        "mime-version",
-        "content-type",
-        "content-transfer-encoding",
-    });
-    _HEADER_NAME = re.compile("^[A-Za-z0-9-]{1,76}$");
-    NO_HEADERS_HOLD = "this inbox can't carry the headers this email needs";
 }
 
 """A hook returned something that can't be sent."""

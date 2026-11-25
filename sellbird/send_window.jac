@@ -67,155 +67,149 @@ import from functools { lru_cache }
 
 import pytz;
 
-glob START_SPREAD: any;
+glob START_SPREAD: any = timedelta(minutes=30);
 
-glob MAX_NEAREST_KM: any;
+glob MAX_NEAREST_KM: any = 500;
 
-glob MAX_REGION_KM: any;
+glob MAX_REGION_KM: any = 3000;
 
-glob US_STATES: any;
+glob US_STATES: any = {
+    "AL": ("alabama", "America/Chicago"),
+    "AK": ("alaska", "America/Anchorage"),
+    "AZ": ("arizona", "America/Phoenix"),
+    "AR": ("arkansas", "America/Chicago"),
+    "CA": ("california", "America/Los_Angeles"),
+    "CO": ("colorado", "America/Denver"),
+    "CT": ("connecticut", "America/New_York"),
+    "DE": ("delaware", "America/New_York"),
+    "DC": ("district of columbia", "America/New_York"),
+    "FL": ("florida", "America/New_York"),
+    "GA": ("georgia", "America/New_York"),
+    "HI": ("hawaii", "Pacific/Honolulu"),
+    "ID": ("idaho", "America/Boise"),
+    "IL": ("illinois", "America/Chicago"),
+    "IN": ("indiana", "America/Indiana/Indianapolis"),
+    "IA": ("iowa", "America/Chicago"),
+    "KS": ("kansas", "America/Chicago"),
+    "KY": ("kentucky", "America/New_York"),
+    "LA": ("louisiana", "America/Chicago"),
+    "ME": ("maine", "America/New_York"),
+    "MD": ("maryland", "America/New_York"),
+    "MA": ("massachusetts", "America/New_York"),
+    "MI": ("michigan", "America/Detroit"),
+    "MN": ("minnesota", "America/Chicago"),
+    "MS": ("mississippi", "America/Chicago"),
+    "MO": ("missouri", "America/Chicago"),
+    "MT": ("montana", "America/Denver"),
+    "NE": ("nebraska", "America/Chicago"),
+    "NV": ("nevada", "America/Los_Angeles"),
+    "NH": ("new hampshire", "America/New_York"),
+    "NJ": ("new jersey", "America/New_York"),
+    "NM": ("new mexico", "America/Denver"),
+    "NY": ("new york", "America/New_York"),
+    "NC": ("north carolina", "America/New_York"),
+    "ND": ("north dakota", "America/Chicago"),
+    "OH": ("ohio", "America/New_York"),
+    "OK": ("oklahoma", "America/Chicago"),
+    "OR": ("oregon", "America/Los_Angeles"),
+    "PA": ("pennsylvania", "America/New_York"),
+    "RI": ("rhode island", "America/New_York"),
+    "SC": ("south carolina", "America/New_York"),
+    "SD": ("south dakota", "America/Chicago"),
+    "TN": ("tennessee", "America/Chicago"),
+    "TX": ("texas", "America/Chicago"),
+    "UT": ("utah", "America/Denver"),
+    "VT": ("vermont", "America/New_York"),
+    "VA": ("virginia", "America/New_York"),
+    "WA": ("washington", "America/Los_Angeles"),
+    "WV": ("west virginia", "America/New_York"),
+    "WI": ("wisconsin", "America/Chicago"),
+    "WY": ("wyoming", "America/Denver"),
+};
 
-glob CA_PROVINCES: any;
+glob CA_PROVINCES: any = {
+    "AB": ("alberta", "America/Edmonton"),
+    "BC": ("british columbia", "America/Vancouver"),
+    "MB": ("manitoba", "America/Winnipeg"),
+    "NB": ("new brunswick", "America/Moncton"),
+    "NL": ("newfoundland and labrador", "America/St_Johns"),
+    "NS": ("nova scotia", "America/Halifax"),
+    "NT": ("northwest territories", "America/Edmonton"),
+    "NU": ("nunavut", "America/Iqaluit"),
+    "ON": ("ontario", "America/Toronto"),
+    "PE": ("prince edward island", "America/Halifax"),
+    "QC": ("quebec", "America/Toronto"),
+    "SK": ("saskatchewan", "America/Regina"),
+    "YT": ("yukon", "America/Whitehorse"),
+};
 
-glob AU_STATES: any;
+glob AU_STATES: any = {
+    "NSW": ("new south wales", "Australia/Sydney"),
+    "VIC": ("victoria", "Australia/Melbourne"),
+    "QLD": ("queensland", "Australia/Brisbane"),
+    "WA": ("western australia", "Australia/Perth"),
+    "SA": ("south australia", "Australia/Adelaide"),
+    "TAS": ("tasmania", "Australia/Hobart"),
+    "ACT": ("australian capital territory", "Australia/Sydney"),
+    "NT": ("northern territory", "Australia/Darwin"),
+};
 
-glob CA_CODES_ALONE: any;
+glob CA_CODES_ALONE: any = {"AB", "BC", "MB", "NB", "NS", "ON", "QC"};
 
-glob AU_CODES_ALONE: any;
+glob AU_CODES_ALONE: any = {"NSW", "VIC", "QLD", "TAS", "ACT"};
 
-glob MAIN_ZONE: any;
+glob MAIN_ZONE: any = {
+    "CL": "America/Santiago",
+    "CN": "Asia/Shanghai",
+    "EC": "America/Guayaquil",
+    "ES": "Europe/Madrid",
+    "NZ": "Pacific/Auckland",
+    "PT": "Europe/Lisbon",
+    "UA": "Europe/Kyiv",
+    "AU": "Australia/Sydney",
+    "BR": "America/Sao_Paulo",
+    "CA": "America/Toronto",
+    "ID": "Asia/Jakarta",
+    "MX": "America/Mexico_City",
+    "RU": "Europe/Moscow",
+};
 
-glob COUNTRY_ALIASES: any;
+glob COUNTRY_ALIASES: any = {
+    "uk": "GB",
+    "united kingdom": "GB",
+    "great britain": "GB",
+    "britain": "GB",
+    "england": "GB",
+    "scotland": "GB",
+    "wales": "GB",
+    "northern ireland": "GB",
+    "usa": "US",
+    "us": "US",
+    "united states of america": "US",
+    "america": "US",
+    "the netherlands": "NL",
+    "holland": "NL",
+    "deutschland": "DE",
+    "south korea": "KR",
+    "korea": "KR",
+    "uae": "AE",
+    "czechia": "CZ",
+    "republic of ireland": "IE",
+    "eire": "IE",
+};
 
-glob REGION_ALIASES: any;
+glob REGION_ALIASES: any = {
+    "newfoundland": "NL",
+    "labrador": "NL",
+    "pei": "PE",
+    "yukon territory": "YT",
+};
 
-glob REGION_COUNTRY: any;
-
-with entry {
-    START_SPREAD = timedelta(minutes=30);
-    MAX_NEAREST_KM = 500;
-    MAX_REGION_KM = 3000;
-    US_STATES = {
-        "AL": ("alabama", "America/Chicago"),
-        "AK": ("alaska", "America/Anchorage"),
-        "AZ": ("arizona", "America/Phoenix"),
-        "AR": ("arkansas", "America/Chicago"),
-        "CA": ("california", "America/Los_Angeles"),
-        "CO": ("colorado", "America/Denver"),
-        "CT": ("connecticut", "America/New_York"),
-        "DE": ("delaware", "America/New_York"),
-        "DC": ("district of columbia", "America/New_York"),
-        "FL": ("florida", "America/New_York"),
-        "GA": ("georgia", "America/New_York"),
-        "HI": ("hawaii", "Pacific/Honolulu"),
-        "ID": ("idaho", "America/Boise"),
-        "IL": ("illinois", "America/Chicago"),
-        "IN": ("indiana", "America/Indiana/Indianapolis"),
-        "IA": ("iowa", "America/Chicago"),
-        "KS": ("kansas", "America/Chicago"),
-        "KY": ("kentucky", "America/New_York"),
-        "LA": ("louisiana", "America/Chicago"),
-        "ME": ("maine", "America/New_York"),
-        "MD": ("maryland", "America/New_York"),
-        "MA": ("massachusetts", "America/New_York"),
-        "MI": ("michigan", "America/Detroit"),
-        "MN": ("minnesota", "America/Chicago"),
-        "MS": ("mississippi", "America/Chicago"),
-        "MO": ("missouri", "America/Chicago"),
-        "MT": ("montana", "America/Denver"),
-        "NE": ("nebraska", "America/Chicago"),
-        "NV": ("nevada", "America/Los_Angeles"),
-        "NH": ("new hampshire", "America/New_York"),
-        "NJ": ("new jersey", "America/New_York"),
-        "NM": ("new mexico", "America/Denver"),
-        "NY": ("new york", "America/New_York"),
-        "NC": ("north carolina", "America/New_York"),
-        "ND": ("north dakota", "America/Chicago"),
-        "OH": ("ohio", "America/New_York"),
-        "OK": ("oklahoma", "America/Chicago"),
-        "OR": ("oregon", "America/Los_Angeles"),
-        "PA": ("pennsylvania", "America/New_York"),
-        "RI": ("rhode island", "America/New_York"),
-        "SC": ("south carolina", "America/New_York"),
-        "SD": ("south dakota", "America/Chicago"),
-        "TN": ("tennessee", "America/Chicago"),
-        "TX": ("texas", "America/Chicago"),
-        "UT": ("utah", "America/Denver"),
-        "VT": ("vermont", "America/New_York"),
-        "VA": ("virginia", "America/New_York"),
-        "WA": ("washington", "America/Los_Angeles"),
-        "WV": ("west virginia", "America/New_York"),
-        "WI": ("wisconsin", "America/Chicago"),
-        "WY": ("wyoming", "America/Denver"),
-    };
-    CA_PROVINCES = {
-        "AB": ("alberta", "America/Edmonton"),
-        "BC": ("british columbia", "America/Vancouver"),
-        "MB": ("manitoba", "America/Winnipeg"),
-        "NB": ("new brunswick", "America/Moncton"),
-        "NL": ("newfoundland and labrador", "America/St_Johns"),
-        "NS": ("nova scotia", "America/Halifax"),
-        "NT": ("northwest territories", "America/Edmonton"),
-        "NU": ("nunavut", "America/Iqaluit"),
-        "ON": ("ontario", "America/Toronto"),
-        "PE": ("prince edward island", "America/Halifax"),
-        "QC": ("quebec", "America/Toronto"),
-        "SK": ("saskatchewan", "America/Regina"),
-        "YT": ("yukon", "America/Whitehorse"),
-    };
-    AU_STATES = {
-        "NSW": ("new south wales", "Australia/Sydney"),
-        "VIC": ("victoria", "Australia/Melbourne"),
-        "QLD": ("queensland", "Australia/Brisbane"),
-        "WA": ("western australia", "Australia/Perth"),
-        "SA": ("south australia", "Australia/Adelaide"),
-        "TAS": ("tasmania", "Australia/Hobart"),
-        "ACT": ("australian capital territory", "Australia/Sydney"),
-        "NT": ("northern territory", "Australia/Darwin"),
-    };
-    CA_CODES_ALONE = {"AB", "BC", "MB", "NB", "NS", "ON", "QC"};
-    AU_CODES_ALONE = {"NSW", "VIC", "QLD", "TAS", "ACT"};
-    MAIN_ZONE = {
-        "CL": "America/Santiago",
-        "CN": "Asia/Shanghai",
-        "EC": "America/Guayaquil",
-        "ES": "Europe/Madrid",
-        "NZ": "Pacific/Auckland",
-        "PT": "Europe/Lisbon",
-        "UA": "Europe/Kyiv",
-        "AU": "Australia/Sydney",
-        "BR": "America/Sao_Paulo",
-        "CA": "America/Toronto",
-        "ID": "Asia/Jakarta",
-        "MX": "America/Mexico_City",
-        "RU": "Europe/Moscow",
-    };
-
-    COUNTRY_ALIASES = {
-        "uk": "GB",
-        "united kingdom": "GB",
-        "great britain": "GB",
-        "britain": "GB",
-        "england": "GB",
-        "scotland": "GB",
-        "wales": "GB",
-        "northern ireland": "GB",
-        "usa": "US",
-        "us": "US",
-        "united states of america": "US",
-        "america": "US",
-        "the netherlands": "NL",
-        "holland": "NL",
-        "deutschland": "DE",
-        "south korea": "KR",
-        "korea": "KR",
-        "uae": "AE",
-        "czechia": "CZ",
-        "republic of ireland": "IE",
-        "eire": "IE",
-    };
-    REGION_ALIASES = {"newfoundland": "NL", "labrador": "NL", "pei": "PE", "yukon territory": "YT"};
-}
+glob REGION_COUNTRY: any = {
+    **{code: "US" for code in US_STATES},
+    **{code: "CA" for code in CA_PROVINCES},
+    **{code: "AU" for code in AU_STATES},
+};
 
 """Lowercase, no accents or dots, single spaces: "Québec" -> "quebec"."""
 def _clean(text: builtins.str) -> builtins.str;
@@ -263,14 +257,6 @@ def _main_zone_only(code: builtins.str, point=None) -> builtins.bool;
 
 """Comma-separated parts, last first, with postcodes dropped."""
 def _parts(location: builtins.str) -> builtins.list[builtins.str];
-
-with entry {
-    REGION_COUNTRY = {
-        **{code: "US" for code in US_STATES},
-        **{code: "CA" for code in CA_PROVINCES},
-        **{code: "AU" for code in AU_STATES},
-    };
-}
 
 """Upper-case words in a part, dots dropped: "D.C." -> "DC"."""
 def _codes(part: builtins.str) -> builtins.list[builtins.str];

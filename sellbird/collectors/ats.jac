@@ -33,89 +33,88 @@ import from urllib.parse { quote, unquote }
 
 import httpx;
 
-glob logger: any;
+glob logger: any = logging.getLogger("sellbird.collectors.ats");
 
-glob MAX_FEED_BYTES: any;
+glob MAX_FEED_BYTES: any = 8 * 1024 * 1024;
 
-glob ATS_LABELS: any;
+glob ATS_LABELS: any = {
+    "greenhouse": "Greenhouse",
+    "lever": "Lever",
+    "lever_eu": "Lever",
+    "ashby": "Ashby",
+    "workable": "Workable",
+};
 
-glob _S: any;
+glob _S: any = "\\\\?/";
 
-glob _TOKEN: any;
+glob _TOKEN: any = "([A-Za-z0-9][A-Za-z0-9_.%-]*)";
 
-glob _BOARD_RES: any;
-
-glob _NOT_TOKENS: any;
-
-glob _ASSET: any;
-
-glob MANY_BOARDS: any;
-
-glob _PARSERS: any;
-
-glob _FILLER_WORDS: any;
-
-glob _EQUIVALENT: any;
-
-glob _REPORTS_TO: any;
-
-with entry {
-    logger = logging.getLogger("sellbird.collectors.ats");
-    MAX_FEED_BYTES = 8 * 1024 * 1024;
-
-    ATS_LABELS = {
-        "greenhouse": "Greenhouse",
-        "lever": "Lever",
-        "lever_eu": "Lever",
-        "ashby": "Ashby",
-        "workable": "Workable",
-    };
-    _S = "\\\\?/";
-    _TOKEN = "([A-Za-z0-9][A-Za-z0-9_.%-]*)";
-    _BOARD_RES = (
-        (
-            "greenhouse",
-            re.compile(
-                f"(?:job-)?boards\\.greenhouse\\.io{_S}embed{_S}job_(?:board|app)(?:{_S}js)?\\?(?:[^\\\"'\\s<>]*?&(?:amp;)?)?for=([A-Za-z0-9_-]+)",
-                re.I,
-            ),
+glob _BOARD_RES: any = (
+    (
+        "greenhouse",
+        re.compile(
+            f"(?:job-)?boards\\.greenhouse\\.io{_S}embed{_S}job_(?:board|app)(?:{_S}js)?\\?(?:[^\\\"'\\s<>]*?&(?:amp;)?)?for=([A-Za-z0-9_-]+)",
+            re.I,
         ),
-        (
-            "greenhouse",
-            re.compile(f"boards-api\\.greenhouse\\.io{_S}v1{_S}boards{_S}([A-Za-z0-9_-]+)", re.I),
+    ),
+    (
+        "greenhouse",
+        re.compile(f"boards-api\\.greenhouse\\.io{_S}v1{_S}boards{_S}([A-Za-z0-9_-]+)", re.I),
+    ),
+    (
+        "greenhouse",
+        re.compile(f"(?<![\\w.@-])(?:job-)?boards\\.greenhouse\\.io{_S}([A-Za-z0-9_-]+)", re.I),
+    ),
+    ("lever", re.compile(f"(?<![\\w.@-])jobs\\.lever\\.co{_S}{_TOKEN}", re.I)),
+    ("lever", re.compile(f"(?<![\\w.@-])api\\.lever\\.co{_S}v0{_S}postings{_S}{_TOKEN}", re.I)),
+    ("lever_eu", re.compile(f"(?<![\\w.@-])jobs\\.eu\\.lever\\.co{_S}{_TOKEN}", re.I)),
+    (
+        "lever_eu",
+        re.compile(f"(?<![\\w.@-])api\\.eu\\.lever\\.co{_S}v0{_S}postings{_S}{_TOKEN}", re.I),
+    ),
+    ("ashby", re.compile(f"(?<![\\w.@-])jobs\\.ashbyhq\\.com{_S}{_TOKEN}", re.I)),
+    ("ashby", re.compile(f"api\\.ashbyhq\\.com{_S}posting-api{_S}job-board{_S}{_TOKEN}", re.I)),
+    (
+        "workable",
+        re.compile(
+            f"apply\\.workable\\.com{_S}api{_S}v1{_S}widget{_S}accounts{_S}([A-Za-z0-9_-]+)", re.I
         ),
-        (
-            "greenhouse",
-            re.compile(f"(?<![\\w.@-])(?:job-)?boards\\.greenhouse\\.io{_S}([A-Za-z0-9_-]+)", re.I),
-        ),
-        ("lever", re.compile(f"(?<![\\w.@-])jobs\\.lever\\.co{_S}{_TOKEN}", re.I)),
-        ("lever", re.compile(f"(?<![\\w.@-])api\\.lever\\.co{_S}v0{_S}postings{_S}{_TOKEN}", re.I)),
-        ("lever_eu", re.compile(f"(?<![\\w.@-])jobs\\.eu\\.lever\\.co{_S}{_TOKEN}", re.I)),
-        (
-            "lever_eu",
-            re.compile(f"(?<![\\w.@-])api\\.eu\\.lever\\.co{_S}v0{_S}postings{_S}{_TOKEN}", re.I),
-        ),
-        ("ashby", re.compile(f"(?<![\\w.@-])jobs\\.ashbyhq\\.com{_S}{_TOKEN}", re.I)),
-        ("ashby", re.compile(f"api\\.ashbyhq\\.com{_S}posting-api{_S}job-board{_S}{_TOKEN}", re.I)),
-        (
-            "workable",
-            re.compile(
-                f"apply\\.workable\\.com{_S}api{_S}v1{_S}widget{_S}accounts{_S}([A-Za-z0-9_-]+)",
-                re.I,
-            ),
-        ),
-        ("workable", re.compile(f"(?<![\\w.@-])apply\\.workable\\.com{_S}([A-Za-z0-9_-]+)", re.I)),
-        (
-            "workable",
-            re.compile("(?<![\\w.@-])([a-z0-9][a-z0-9-]*)\\.workable\\.com(?![\\w-])", re.I),
-        ),
-    );
-    _NOT_TOKENS = frozenset(
-        "\nembed api j v0 v1 jobs job job_board posting-api www apply app help resources\ncareers static assets cdn widget accounts blog login signin\n".split(),
-    );
-    _ASSET = re.compile("\\.(js|mjs|css|json|png|jpe?g|svg|gif|ico|webp|woff2?|map)$", re.I);
-    MANY_BOARDS = 3;
-}
+    ),
+    ("workable", re.compile(f"(?<![\\w.@-])apply\\.workable\\.com{_S}([A-Za-z0-9_-]+)", re.I)),
+    ("workable", re.compile("(?<![\\w.@-])([a-z0-9][a-z0-9-]*)\\.workable\\.com(?![\\w-])", re.I)),
+);
+
+glob _NOT_TOKENS: any = frozenset(
+    "\nembed api j v0 v1 jobs job job_board posting-api www apply app help resources\ncareers static assets cdn widget accounts blog login signin\n".split(),
+);
+
+glob _ASSET: any = re.compile("\\.(js|mjs|css|json|png|jpe?g|svg|gif|ico|webp|woff2?|map)$", re.I);
+
+glob MANY_BOARDS: any = 3;
+
+glob _FILLER_WORDS: any = frozenset({"of", "the", "and", "for", "a", "an", "&", "to"});
+
+glob _EQUIVALENT: any = `tuple(
+    (re.compile(p, re.I), r)
+    for (p, r) in (
+        ("\\bvice[\\s-]+president\\b", "vp"),
+        ("\\bchief\\s+executive\\s+officer\\b", "ceo"),
+        ("\\bchief\\s+marketing\\s+officer\\b", "cmo"),
+        ("\\bchief\\s+technology\\s+officer\\b", "cto"),
+        ("\\bchief\\s+technical\\s+officer\\b", "cto"),
+        ("\\bchief\\s+financial\\s+officer\\b", "cfo"),
+        ("\\bchief\\s+operating\\s+officer\\b", "coo"),
+        ("\\bchief\\s+revenue\\s+officer\\b", "cro"),
+        ("\\bchief\\s+product\\s+officer\\b", "cpo"),
+        ("\\bsr\\b\\.?", "senior"),
+        ("\\bjr\\b\\.?", "junior"),
+        ("\\bfront[\\s-]+end\\b", "frontend"),
+        ("\\bback[\\s-]+end\\b", "backend"),
+        ("\\bfull[\\s-]+stack\\b", "fullstack"),
+    ),
+);
+
+glob _REPORTS_TO: any = re.compile("\\s+to\\s+(?:the\\s+|our\\s+)?\\S.*$", re.I);
 
 """One company's job board on one ATS."""
 @dataclass(frozen=True)
@@ -188,6 +187,8 @@ def _ashby(payload) -> builtins.list[Posting];
 
 def _workable(payload) -> builtins.list[Posting];
 
+glob _PARSERS: any;
+
 with entry {
     _PARSERS = {
         "greenhouse": _greenhouse,
@@ -204,30 +205,6 @@ def parse_feed(ats: builtins.str, payload) -> builtins.list[Posting];
 """Read one board's feed: one request, size-capped. None when the board
     doesn't answer with JSON (gone, renamed, or never existed)."""
 async def read_board(client: httpx.AsyncClient, board: Board) -> builtins.list[Posting] | None;
-
-with entry {
-    _FILLER_WORDS = frozenset({"of", "the", "and", "for", "a", "an", "&", "to"});
-    _EQUIVALENT = `tuple(
-        (re.compile(p, re.I), r)
-        for (p, r) in (
-            ("\\bvice[\\s-]+president\\b", "vp"),
-            ("\\bchief\\s+executive\\s+officer\\b", "ceo"),
-            ("\\bchief\\s+marketing\\s+officer\\b", "cmo"),
-            ("\\bchief\\s+technology\\s+officer\\b", "cto"),
-            ("\\bchief\\s+technical\\s+officer\\b", "cto"),
-            ("\\bchief\\s+financial\\s+officer\\b", "cfo"),
-            ("\\bchief\\s+operating\\s+officer\\b", "coo"),
-            ("\\bchief\\s+revenue\\s+officer\\b", "cro"),
-            ("\\bchief\\s+product\\s+officer\\b", "cpo"),
-            ("\\bsr\\b\\.?", "senior"),
-            ("\\bjr\\b\\.?", "junior"),
-            ("\\bfront[\\s-]+end\\b", "frontend"),
-            ("\\bback[\\s-]+end\\b", "backend"),
-            ("\\bfull[\\s-]+stack\\b", "fullstack"),
-        ),
-    );
-    _REPORTS_TO = re.compile("\\s+to\\s+(?:the\\s+|our\\s+)?\\S.*$", re.I);
-}
 
 def _words(text: builtins.str) -> builtins.set[builtins.str];
 

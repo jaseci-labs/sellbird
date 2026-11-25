@@ -16,6 +16,7 @@ import pytest_asyncio
 from pydantic import ValidationError
 
 import sellbird.config as config_module
+from sellbird import paths
 from sellbird.agents.writer import BUILT_IN_FOOTER, Writer
 from sellbird.config import (
     MAX_EMAIL_RULES_CHARS,
@@ -103,7 +104,7 @@ def test_off_by_default_and_blank_means_off():
 
 
 def test_a_relative_path_is_read_from_the_sellbird_folder(tmp_path, monkeypatch):
-    monkeypatch.setattr(config_module, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(paths, "PROJECT_ROOT", tmp_path)
     (tmp_path / "skills").mkdir()
     (tmp_path / "skills" / "email_rules.md").write_text(f"\n{RULES}\n", encoding="utf-8")
     assert load_email_rules(config(email_rules="skills/email_rules.md")) == RULES

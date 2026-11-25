@@ -249,9 +249,12 @@ impl matching_roles(
     postings: builtins.list[Posting], keywords: builtins.list[builtins.str]
 ) -> builtins.list[Posting] {
     wanted: any = [w for w in (_words(k) - _FILLER_WORDS for k in keywords) if w];
-    return [
-        p
-        for p in postings
-        if `any(operator.le(w, _words(_REPORTS_TO.sub("", p.title))) for w in wanted)
-    ];
+    found: builtins.list[Posting] = [];
+    for p in postings {
+        have: any = _words(_REPORTS_TO.sub("", p.title));
+        if `any(operator.le(w, have) for w in wanted) {
+            found.append(p);
+        }
+    }
+    return found;
 }
