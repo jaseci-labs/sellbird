@@ -580,7 +580,7 @@ def test_dashboard_codex_quota_client_follows_the_configured_model(client, monke
             built.append(codex_client.model)
             super().__init__(None)
 
-    monkeypatch.setattr(codex_mod, "CodexQuotaClient", Quota)
+    monkeypatch.setattr(dash, "CodexQuotaClient", Quota)
     monkeypatch.setattr(dash, "_active_brain",
                         lambda: BrainConfig(provider="codex", model="gpt-5.5"))
     client.get("/api/usage")

@@ -29,7 +29,7 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setattr(dash, "DB_PATH", db)
     monkeypatch.setattr(dash, "PID_FILE", tmp_path / "data" / "sellbird.pid")
     monkeypatch.setattr(dash, "LOG_FILE", tmp_path / "data" / "sellbird.log")
-    monkeypatch.setattr(sellbird_config, "load_config", lambda *a, **k: CONFIG)
+    monkeypatch.setattr(dash, "load_config", lambda *a, **k: CONFIG)
     dash.token_store.configure(tmp_path / "data" / "dashboard-token")
 
     async def _init():
@@ -101,5 +101,5 @@ def test_register_export_failure_is_an_error(client, monkeypatch):
 
     async def broken(*a, **k):
         raise RuntimeError("boom")
-    monkeypatch.setattr(register, "build_register", broken)
+    monkeypatch.setattr(dash, "build_register", broken)
     assert client.get("/api/export/companies.csv").status_code == 500

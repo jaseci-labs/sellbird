@@ -368,10 +368,10 @@ async def test_setup_status_venv_check_is_done_outside_a_checkout(tmp_path, monk
         checks = (await dash.get_setup_status())["checks"]
         return next(c for c in checks if c["id"] == "venv")["done"]
 
-    monkeypatch.setattr(dash, "PACKAGE_ROOT", tmp_path / "site-packages")
+    monkeypatch.setattr(paths, "PACKAGE_ROOT", tmp_path / "site-packages")
     assert await venv_done() is True
     checkout = _make_checkout(tmp_path / "repo")
-    monkeypatch.setattr(dash, "PACKAGE_ROOT", checkout)
+    monkeypatch.setattr(paths, "PACKAGE_ROOT", checkout)
     assert await venv_done() is False
     (checkout / ".venv").mkdir()
     assert await venv_done() is True

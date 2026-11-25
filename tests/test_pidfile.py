@@ -112,7 +112,7 @@ def status_client(monkeypatch, tmp_path):
 def test_status_running_for_cli_started_loop(status_client, monkeypatch):
     """A loop started with `sellbird run` has no dashboard subprocess, only its PID file."""
     lock = status_client.pid_file.with_name("sellbird.lock")
-    monkeypatch.setattr(dash, "LOCK_FILE", lock)
+    monkeypatch.setattr(pidfile, "LOCK_FILE", lock)
     status_client.pid_file.write_text("4242")
     monkeypatch.setattr(dash, "pid_alive", lambda pid: pid == 4242)
     held = pidfile.hold_loop_lock(lock)
@@ -174,7 +174,7 @@ def test_probing_the_lock_does_not_take_it(tmp_path):
 
 def test_a_reused_pid_is_not_reported_as_sellbird(status_client, monkeypatch, tmp_path):
     """The PID is alive, but it is some other program: no loop holds the lock."""
-    monkeypatch.setattr(dash, "LOCK_FILE", tmp_path / "sellbird.lock")
+    monkeypatch.setattr(pidfile, "LOCK_FILE", tmp_path / "sellbird.lock")
     status_client.pid_file.write_text("4242")
     monkeypatch.setattr(dash, "pid_alive", lambda pid: True)
     data = status_client.get("/api/sellbird/status").json()
@@ -183,7 +183,7 @@ def test_a_reused_pid_is_not_reported_as_sellbird(status_client, monkeypatch, tm
 
 
 def test_stop_never_signals_a_reused_pid(status_client, monkeypatch, tmp_path):
-    monkeypatch.setattr(dash, "LOCK_FILE", tmp_path / "sellbird.lock")
+    monkeypatch.setattr(pidfile, "LOCK_FILE", tmp_path / "sellbird.lock")
     status_client.pid_file.write_text("4242")
     monkeypatch.setattr(dash, "pid_alive", lambda pid: True)
     # dash.os.kill is _no_kill: any signal fails the test.
@@ -213,8 +213,8 @@ def test_sellbird_run_refuses_when_a_loop_is_already_running(monkeypatch, tmp_pa
 
 def test_start_launches_the_heartbeat_not_the_cli_help(status_client, monkeypatch, tmp_path):
     import sellbird.main as main_mod
-    monkeypatch.setattr(main_mod, "_needs_setup", lambda: False)
-    monkeypatch.setattr(dash, "LOCK_FILE", tmp_path / "sellbird.lock")
+    monkeypatch.setattr(dash, "_needs_setup", lambda: False)
+    monkeypatch.setattr(pidfile, "LOCK_FILE", tmp_path / "sellbird.lock")
     monkeypatch.setattr(dash, "LOG_FILE", tmp_path / "sellbird.log")
     launched = {}
 
@@ -247,8 +247,8 @@ class _FakeChild:
 def test_start_runs_the_loop_with_no_terminal_input(status_client, monkeypatch, tmp_path):
     """The child must never read the dashboard's terminal (the setup wizard would)."""
     import sellbird.main as main_mod
-    monkeypatch.setattr(main_mod, "_needs_setup", lambda: False)
-    monkeypatch.setattr(dash, "LOCK_FILE", tmp_path / "sellbird.lock")
+    monkeypatch.setattr(dash, "_needs_setup", lambda: False)
+    monkeypatch.setattr(pidfile, "LOCK_FILE", tmp_path / "sellbird.lock")
     monkeypatch.setattr(dash, "LOG_FILE", tmp_path / "sellbird.log")
     seen = {}
 
@@ -264,8 +264,8 @@ def test_start_runs_the_loop_with_no_terminal_input(status_client, monkeypatch, 
 
 def test_start_refuses_before_setup_is_done(status_client, monkeypatch, tmp_path):
     import sellbird.main as main_mod
-    monkeypatch.setattr(dash, "LOCK_FILE", tmp_path / "sellbird.lock")
-    monkeypatch.setattr(main_mod, "_needs_setup", lambda: True)
+    monkeypatch.setattr(pidfile, "LOCK_FILE", tmp_path / "sellbird.lock")
+    monkeypatch.setattr(dash, "_needs_setup", lambda: True)
 
     def _never(*a, **k):
         raise AssertionError("started a loop that would sit in the setup wizard")
@@ -294,7 +294,7 @@ def test_stop_that_could_not_end_the_loop_says_so(status_client, monkeypatch, tm
     """Started by another user or an elevated terminal: the signal is refused.
     Stop must not claim success, or forget the loop it failed to stop."""
     lock = tmp_path / "sellbird.lock"
-    monkeypatch.setattr(dash, "LOCK_FILE", lock)
+    monkeypatch.setattr(pidfile, "LOCK_FILE", lock)
     monkeypatch.setattr(dash, "pid_alive", lambda pid: True)
     monkeypatch.setattr(dash.asyncio, "sleep", lambda s: _done())
 
@@ -312,7 +312,7 @@ def test_stop_that_could_not_end_the_loop_says_so(status_client, monkeypatch, tm
 
 
 def test_stopping_the_dashboards_own_loop_needs_no_force_kill(status_client, monkeypatch, tmp_path):
-    monkeypatch.setattr(dash, "LOCK_FILE", tmp_path / "sellbird.lock")
+    monkeypatch.setattr(pidfile, "LOCK_FILE", tmp_path / "sellbird.lock")
     child = _FakeChild()
     monkeypatch.setattr(dash, "_sellbird_process", child)
     # A zombie still answers signal 0, so pid_alive alone would say "alive".

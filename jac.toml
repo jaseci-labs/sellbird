@@ -100,7 +100,7 @@ files = [
     "sellbird/collectors/people.jac",
     "sellbird/collectors/profile.jac",
     "sellbird/config.jac",
-    "sellbird/dashboard.py",
+    "sellbird/dashboard.jac",
     "sellbird/dashboard_auth.jac",
     "sellbird/dashboard_instance.jac",
     "sellbird/deliverability.jac",
