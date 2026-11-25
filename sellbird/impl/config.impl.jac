@@ -1,276 +1,155 @@
-impl ConfigError.__repr__ -> str {
-    return (getattr(builtins.super(ConfigError, self), "__repr__") as any)();
+impl _need(ok: any, msg: str, v: any) -> any {
+    if not ok {
+        raise ValueError(msg);
+    }
+    return v;
 }
 
-impl ConfigError.__eq__(other: any) -> bool {
-    return self is other;
+impl _one_of(v: str, allowed: any, what: str) -> str {
+    return _need(v in allowed, f"'{v}' is not {what}. Use one of: {', '.join(allowed)}.", v);
 }
 
-impl ConfigError.__hash__ -> int {
-    return id(self);
+impl _parses(kind: any, v: str) -> bool {
+    try {
+        kind.fromisoformat(v);
+    } except ValueError {
+        return False;
+    }
+    return True;
 }
 
-impl ConfigFileNotFoundError.__repr__ -> str {
-    return (getattr(builtins.super(ConfigFileNotFoundError, self), "__repr__") as any)();
-}
-
-impl ConfigFileNotFoundError.__eq__(other: any) -> bool {
-    return self is other;
-}
-
-impl ConfigFileNotFoundError.__hash__ -> int {
-    return id(self);
-}
-
-impl WarmupConfig._blank_is_empty(v, info) -> any {
+impl WarmupConfig._blank_is_default(v: any, info: any) -> any {
     if v is None {
-        return "";
+        return cls.model_fields[info.field_name].default;
     }
+    if info.field_name == "start_date" and isinstance(v, _date) {
+        return (v.date() if isinstance(v, _datetime) else v).isoformat();
+    }
+    day: any = v.strip() if info.field_name == "start_date" and isinstance(v, str) else "";
+    return day[:10] if len(day) > 10 and day[10] in " T" else v;
+}
+
+impl WarmupConfig._valid(v: any, info: any) -> any {
     if info.field_name != "start_date" {
-        return v;
+        return _need(v >= 0, "warmup values must be >= 0", v);
     }
-    if isinstance(v, _date) {
-        return (v.date() if hasattr(v, "date") and callable(v.date) else v).isoformat();
-    }
-    if isinstance(v, `str) and len(v.strip()) > 10 and v.strip()[10] in " T" {
-        return v.strip()[:10];
-    }
-    return "" if v is None else v;
-}
-
-impl WarmupConfig._blank_is_default(v, info) -> any {
-    return cls.model_fields[info.field_name].default if v is None else v;
-}
-
-impl WarmupConfig._valid_date(v: builtins.str) -> builtins.str {
     v = (v or "").strip();
-    if v {
-        try {
-            _date.fromisoformat(v);
-        } except ValueError {
-            raise ValueError(f"warmup.start_date '{v}' must be YYYY-MM-DD.");
-        }
-    }
-    return v;
+    return _need(not v or _parses(_date, v), f"warmup.start_date '{v}' must be YYYY-MM-DD.", v);
 }
 
-impl WarmupConfig._non_negative(v: builtins.int) -> builtins.int {
-    if v < 0 {
-        raise ValueError("warmup values must be >= 0");
-    }
-    return v;
-}
-
-impl WarmupConfig.days_in(today: _date | None = None) -> builtins.int | None {
+impl WarmupConfig.days_in(today: _date | None = None) -> int | None {
     if not self.start_date {
         return None;
     }
     return ((today or _date.today()) - _date.fromisoformat(self.start_date)).days;
 }
 
-impl WarmupConfig.daily_cap(ceiling: builtins.int, today: _date | None = None) -> builtins.int {
+impl WarmupConfig.daily_cap(ceiling: int, today: _date | None = None) -> int {
     days: any = self.days_in(today);
     if days is None {
         return ceiling;
     }
-    if days < self.min_days {
-        return 0;
-    }
-    return min(ceiling, self.start_sends + (days - self.min_days) * self.daily_increase);
+    return 0
+        if days < self.min_days
+        else min(ceiling, self.start_sends + (days - self.min_days) * self.daily_increase);
 }
 
-impl SendWindowConfig._valid_clock(v, info) -> any {
+impl SendWindowConfig._valid_clock(v: any, info: any) -> any {
     if v is None {
         return cls.model_fields[info.field_name].default;
     }
-    if isinstance(v, `int) and not isinstance(v, `bool) and 0 <= v < 24 * 60 {
+    if isinstance(v, int) and not isinstance(v, bool) and v >= 0 and v < 24 * 60 {
         v = f"{v // 60:02d}:{v % 60:02d}";
     }
-    v = `str(v).strip();
-    try {
-        _time.fromisoformat(v);
-    } except ValueError {
-        raise ValueError(f"send_window time '{v}' is not valid. Use 24h HH:MM, e.g. '08:00'.");
-    }
-    return v;
-}
-
-impl SendWindowConfig._start_before_end -> any {
-    if _time.fromisoformat(self.start) >= _time.fromisoformat(self.end) {
-        raise ValueError(
-            "send_window.start must be earlier than send_window.end (a send window can't run past midnight).",
-        );
-    }
-    return self;
-}
-
-impl send_window_of(config) -> "SendWindowConfig | None" {
-    email: any = getattr(getattr(config, "channels", None), "email", None);
-    window: any = getattr(email, "send_window", None);
-    return window if isinstance(window, SendWindowConfig) else None;
-}
-
-impl operator_timezone(config) -> builtins.str {
-    quiet: any = getattr(getattr(config, "usage", None), "quiet_hours", None);
-    return getattr(quiet, "timezone", "") or "UTC";
-}
-
-impl SignatureConfig._blank_is_empty(v) -> any {
-    return "" if v is None else `str(v).strip();
-}
-
-impl SignatureConfig._sane_width(v: builtins.int) -> builtins.int {
-    if not 16 <= v <= 600 {
-        raise ValueError("signature.width must be between 16 and 600 pixels.");
-    }
-    return v;
-}
-
-impl SignatureConfig._web_link(v: builtins.str) -> builtins.str {
-    if v and not re.match("https?://[^\\s\\\"<>]+$", v) {
-        raise ValueError(f"signature.link '{v}' must be a web address (https://...).");
-    }
-    return v;
-}
-
-impl SignatureConfig._known_direction(v) -> any {
-    v = (`str(v) if v is not None else "auto").strip().lower() or "auto";
-    if v not in ("auto", "rtl", "ltr") {
-        raise ValueError("signature.direction must be rtl, ltr or auto.");
-    }
-    return v;
-}
-
-impl EmailChannelConfig._blank_warmup(v) -> any {
-    return WarmupConfig() if v is None else v;
-}
-
-impl EmailChannelConfig._blank_signature(v) -> any {
-    return SignatureConfig() if v is None else v;
-}
-
-impl EmailChannelConfig._sends_non_negative(v: builtins.int) -> builtins.int {
-    if v < 0 {
-        raise ValueError("max_daily_sends must be >= 0");
-    }
-    return v;
-}
-
-impl EmailChannelConfig._per_inbox_cap_range(v: builtins.int) -> builtins.int {
-    if not 1 <= v <= 500 {
-        raise ValueError("per_inbox_daily_cap must be between 1 and 500");
-    }
-    return v;
-}
-
-impl EmailChannelConfig.cold_daily_cap(today: _date | None = None) -> builtins.int {
-    return self.warmup.daily_cap(self.max_daily_sends, today);
-}
-
-impl cold_daily_cap(email_config, today: _date | None = None) -> builtins.int {
-    warmup: any = getattr(email_config, "warmup", None);
-    if isinstance(warmup, WarmupConfig) {
-        return warmup.daily_cap(email_config.max_daily_sends, today);
-    }
-    return email_config.max_daily_sends;
-}
-
-impl legacy_sending_held(config) -> builtins.bool {
-    email: any = getattr(getattr(config, "channels", None), "email", None);
-    return operator.eq(getattr(email, "provider", ""), "instantly")
-        and `bool(getattr(email, "require_approval", True));
-}
-
-impl sending_notice(config) -> builtins.str {
-    if not legacy_sending_held(config) {
-        return "";
-    }
-    return "Instantly sending is held: channels.email.require_approval is true, and Instantly has no approval queue. Campaigns stay as drafts and replies go to a human (dashboard Activity tab). Set require_approval: false to let Instantly send automatically, or switch to gmail, microsoft or smtp to approve each email.";
-}
-
-impl normalize_prospect_country(v) -> builtins.str {
-    if isinstance(v, `bool) {
-        raise ValueError(
-            f"prospect_country was read as {v}. YAML turns an unquoted NO or ON into true/false, so quote the code, e.g. prospect_country: \"NO\".",
-        );
-    }
-    v = `str(v or "").strip().upper();
-    v = COUNTRY_ALIASES.get(v, v);
-    if v and not (len(v) == 2 and v.isascii() and v.isalpha()) {
-        raise ValueError(
-            f"'{v}' is not a valid prospect_country. Use a two-letter country code such as US or GB, or leave it empty.",
-        );
-    }
-    return v;
-}
-
-impl PreclearedConfig._upper_country(v) -> builtins.str {
-    v = `str(v or "").strip().upper();
-    return COUNTRY_ALIASES.get(v, v);
-}
-
-impl PreclearedConfig._valid_source(v) -> builtins.str {
-    v = `str(v or "unknown").strip().lower();
-    if v not in PRECLEARED_ADDRESS_SOURCES {
-        raise ValueError(
-            "'"
-                + format(v, "")
-                + "' is not a valid address_source. Use one of: "
-                + format(", ".join(PRECLEARED_ADDRESS_SOURCES), "")
-                + ".",
-        );
-    }
-    return v;
-}
-
-impl PreclearedConfig._valid_prospect_country(v) -> builtins.str {
-    return normalize_prospect_country(v);
-}
-
-impl PreclearedConfig._country_when_enabled -> any {
-    if self.enabled and self.sender_country not in PRECLEARED_SENDER_COUNTRIES {
-        raise ValueError(
-            "compliance.precleared.sender_country must be one of "
-                + format(", ".join(PRECLEARED_SENDER_COUNTRIES), "")
-                + " when the check is enabled.",
-        );
-    }
-    return self;
-}
-
-impl _fold_accents(text: builtins.str) -> builtins.str {
-    text = text.replace("’", "'").replace("‘", "'");
-    return "".join(
-        c
-        for c in unicodedata.normalize("NFD", text)
-        if not (unicodedata.combining(c) and ord(c) < 880),
+    v = str(v).strip();
+    return _need(
+        _parses(_time, v), f"send_window time '{v}' is not valid. Use 24h HH:MM, e.g. '08:00'.", v
     );
 }
 
-impl ComplianceConfig._blank_is_empty(v) -> any {
-    return "" if v is None else v;
+impl SendWindowConfig._start_before_end -> any {
+    return _need(
+        _time.fromisoformat(self.start) < _time.fromisoformat(self.end),
+        "send_window.start must be earlier than send_window.end (a send window can't run past midnight).",
+        self,
+    );
 }
 
-impl ComplianceConfig._clean_do_not_contact(v) -> any {
+impl SignatureConfig._blank_is_empty(v: any, info: any) -> any {
+    if info.field_name != "direction" {
+        return "" if v is None else str(v).strip();
+    }
+    v = (str(v) if v is not None else "auto").strip().lower() or "auto";
+    return _need(v in ("auto", "rtl", "ltr"), "signature.direction must be rtl, ltr or auto.", v);
+}
+
+impl SignatureConfig._valid(v: any, info: any) -> any {
+    if info.field_name == "width" {
+        return _need(v >= 16 and v <= 600, "signature.width must be between 16 and 600 pixels.", v);
+    }
+    return _need(
+        not v or re.match("https?://[^\\s\\\"<>]+$", v),
+        f"signature.link '{v}' must be a web address (https://...).",
+        v,
+    );
+}
+
+impl EmailChannelConfig._blank_section(v: any, info: any) -> any {
+    return (WarmupConfig if info.field_name == "warmup" else SignatureConfig)() if v is None else v;
+}
+
+impl EmailChannelConfig._valid_caps(v: any, info: any) -> any {
+    if info.field_name == "max_daily_sends" {
+        return _need(v >= 0, "max_daily_sends must be >= 0", v);
+    }
+    return _need(v >= 1 and v <= 500, "per_inbox_daily_cap must be between 1 and 500", v);
+}
+
+impl EmailChannelConfig.cold_daily_cap(today: _date | None = None) -> int {
+    return self.warmup.daily_cap(self.max_daily_sends, today);
+}
+
+impl PreclearedConfig._clean(v: any, info: any) -> str {
+    if info.field_name == "prospect_country" {
+        return normalize_prospect_country(v);
+    }
+    if info.field_name == "address_source" {
+        return _one_of(
+            str(v or "unknown").strip().lower(),
+            PRECLEARED_ADDRESS_SOURCES,
+            "a valid address_source",
+        );
+    }
+    v = str(v or "").strip().upper();
+    return COUNTRY_ALIASES.get(v, v);
+}
+
+impl PreclearedConfig._country_when_enabled -> any {
+    return _need(
+        not self.enabled or self.sender_country in PRECLEARED_SENDER_COUNTRIES,
+        f"compliance.precleared.sender_country must be one of {', '.join(PRECLEARED_SENDER_COUNTRIES)} when the check is enabled.",
+        self,
+    );
+}
+
+impl ComplianceConfig._blank_is_empty(v: any, info: any) -> any {
     import from sellbird.gate { do_not_contact_entries }
+    if info.field_name != "do_not_contact" {
+        return "" if v is None else v;
+    }
     if v is None {
         return [];
     }
-    if isinstance(v, `str) {
-        v = [v];
-    }
-    if not isinstance(v, (`list, `tuple)) {
-        raise ValueError("must be a list of email addresses and domains");
-    }
-    seen: builtins.list[builtins.str] = [];
-    for item in v {
-        if item is None {
-            continue;
-        }
-        if not isinstance(item, `str) {
-            raise ValueError(f"{item!r} is not an email address or a domain");
-        }
-        for cleaned in do_not_contact_entries(item) {
+    items: any = [v] if isinstance(v, str) else v;
+    _need(isinstance(items, (list, tuple)), "must be a list of email addresses and domains", v);
+    seen: list[str] = [];
+    for item in items {
+        _need(
+            item is None or isinstance(item, str),
+            f"{item!r} is not an email address or a domain",
+            v,
+        );
+        for cleaned in (do_not_contact_entries(item) if item is not None else []) {
             if cleaned not in seen {
                 seen.append(cleaned);
             }
@@ -279,42 +158,129 @@ impl ComplianceConfig._clean_do_not_contact(v) -> any {
     return seen;
 }
 
-impl ComplianceConfig._recognisable_opt_out(v: builtins.str) -> builtins.str {
-    lowered: any;
+impl ComplianceConfig._recognisable_opt_out(v: str) -> str {
     v = v.strip();
-    lowered = v.lower();
-    if not v {
-        return v;
-    }
     folded: any = _fold_accents(v);
-    if `any(bit in lowered for bit in ("http", "www.", "click", "@"))
-        or _HEBREW_CLICK_RE.search(v)
-        or _FRENCH_CLICK_RE.search(folded)
+    if v
+        and (
+            any(bit in v.lower() for bit in ("http", "www.", "click", "@"))
+            or _HEBREW_CLICK_RE.search(v)
+            or _FRENCH_CLICK_RE.search(folded)
+        )
     {
         raise ValueError(
             "opt_out_line can't contain a link or an email address: cold email allows one link, and opting out must be as simple as replying.",
         );
     }
-    if not (
-        _SAYS_IT_STOPS_RE.search(v)
-        or _SAYS_IT_STOPS_HE_RE.search(v)
-        or _SAYS_IT_STOPS_ES_RE.search(v)
-        or _SAYS_IT_STOPS_IT_RE.search(v)
-        or _SAYS_IT_STOPS_FR_RE.search(folded)
-    ) {
-        raise ValueError(
-            "opt_out_line doesn't tell people they can stop these emails. Say so in any words (\"Not interested? Just let me know and I won't email you again.\"), or set it to \"\" to leave the line off.",
-        );
-    }
-    return v;
+    return _need(
+        not v or _SAYS_IT_STOPS_RE.search(v) or _SAYS_IT_STOPS_FR_RE.search(folded),
+        "opt_out_line doesn't tell people they can stop these emails. Say so in any words (\"Not interested? Just let me know and I won't email you again.\"), or set it to \"\" to leave the line off.",
+        v,
+    );
 }
 
-impl compliance_of(config) -> ComplianceConfig {
+impl QuietHoursConfig._valid(v: str, info: any) -> str {
+    import pytz;
+    if info.field_name == "timezone" {
+        return _need(
+            v in pytz.all_timezones_set,
+            f"'{v}' is not a valid timezone. Use an IANA name like 'America/New_York'.",
+            v,
+        );
+    }
+    return _need(
+        _parses(_time, v), f"'{v}' is not a valid time. Use 24h HH:MM format, e.g. '22:00'.", v
+    );
+}
+
+impl UsageConfig._valid(v: any, info: any) -> any {
+    if info.field_name == "heartbeat_interval_minutes" {
+        return _need(v >= 1, "heartbeat_interval_minutes must be at least 1", v);
+    }
+    return _need(v > 0 and v <= 100, "max_daily_claude_percent must be between 0 and 100", v);
+}
+
+impl BrainConfig._valid(v: any, info: any) -> str {
+    if info.field_name == "provider" {
+        return _one_of(
+            str(v or "claude").strip().lower(), BRAIN_PROVIDERS, "a supported brain provider"
+        );
+    }
+    if info.field_name == "model" {
+        v = str(v or "").strip();
+        return _need(not v or _MODEL_NAME_RE.match(v), f"'{v}' is not a valid model name.", v);
+    }
+    v = str(v or "").strip().lower();
+    return _one_of(v, CODEX_REASONING_EFFORTS, "a valid reasoning effort") if v else v;
+}
+
+impl WriterConfig._blank_rules(v: any) -> any {
+    return "" if v is None else v.strip() if isinstance(v, str) else v;
+}
+
+impl _email_of(config: any) -> any {
+    return getattr(getattr(config, "channels", None), "email", None);
+}
+
+impl send_window_of(config: any) -> any {
+    window: any = getattr(_email_of(config), "send_window", None);
+    return window if isinstance(window, SendWindowConfig) else None;
+}
+
+impl operator_timezone(config: any) -> str {
+    return getattr(getattr(getattr(config, "usage", None), "quiet_hours", None), "timezone", "")
+        or "UTC";
+}
+
+impl cold_daily_cap(email_config: any, today: _date | None = None) -> int {
+    warmup: any = getattr(email_config, "warmup", None);
+    return warmup.daily_cap(email_config.max_daily_sends, today)
+        if isinstance(warmup, WarmupConfig)
+        else email_config.max_daily_sends;
+}
+
+impl legacy_sending_held(config: any) -> bool {
+    email: any = _email_of(config);
+    return operator.eq(getattr(email, "provider", ""), "instantly")
+        and bool(getattr(email, "require_approval", True));
+}
+
+impl sending_notice(config: any) -> str {
+    return "Instantly sending is held: channels.email.require_approval is true, and Instantly has no approval queue. Campaigns stay as drafts and replies go to a human (dashboard Activity tab). Set require_approval: false to let Instantly send automatically, or switch to gmail, microsoft or smtp to approve each email."
+        if legacy_sending_held(config)
+        else "";
+}
+
+impl normalize_prospect_country(v: any) -> str {
+    if isinstance(v, bool) {
+        raise ValueError(
+            f"prospect_country was read as {v}. YAML turns an unquoted NO or ON into true/false, so quote the code, e.g. prospect_country: \"NO\".",
+        );
+    }
+    v = str(v or "").strip().upper();
+    v = COUNTRY_ALIASES.get(v, v);
+    return _need(
+        not v or (len(v) == 2 and v.isascii() and v.isalpha()),
+        f"'{v}' is not a valid prospect_country. Use a two-letter country code such as US or GB, or leave it empty.",
+        v,
+    );
+}
+
+impl _fold_accents(text: str) -> str {
+    text = text.replace("’", "'").replace("‘", "'");
+    return "".join([
+        c
+        for c in unicodedata.normalize("NFD", text)
+        if not (unicodedata.combining(c) and ord(c) < 880)
+    ]);
+}
+
+impl compliance_of(config: any) -> ComplianceConfig {
     found: any = getattr(config, "compliance", None);
     return found if isinstance(found, ComplianceConfig) else ComplianceConfig();
 }
 
-impl compliance_footer_lines(config) -> builtins.list[builtins.str] {
+impl compliance_footer_lines(config: any) -> list[str] {
     compliance: any = compliance_of(config);
     return [
         line
@@ -323,129 +289,34 @@ impl compliance_footer_lines(config) -> builtins.list[builtins.str] {
     ];
 }
 
-impl compliance_notice(config) -> builtins.str {
-    email: any = getattr(getattr(config, "channels", None), "email", None);
-    if not getattr(email, "enabled", False) {
+impl compliance_notice(config: any) -> str {
+    if not getattr(_email_of(config), "enabled", False) {
         return "";
     }
     compliance: any = compliance_of(config);
-    missing: any = [];
-    if not compliance.postal_address.strip() {
-        missing.append(
-            "a postal address (compliance.postal_address: a street address, PO box or virtual mailbox)",
-        );
-    }
+    missing: list[str] = [
+        "a postal address (compliance.postal_address: a street address, PO box or virtual mailbox)",
+    ]
+        if not compliance.postal_address.strip()
+        else [];
     if not compliance.opt_out_line.strip() {
         missing.append("a way to opt out (compliance.opt_out_line)");
     }
-    if not missing {
-        return "";
-    }
     return "Cold emails are going out without "
         + " or ".join(missing)
-        + ". US law (CAN-SPAM) requires both in every cold email. Set them in sellbird.yaml (or sellbird.local.yaml if you trained Sellbird).";
+        + ". US law (CAN-SPAM) requires both in every cold email. Set them in sellbird.yaml (or sellbird.local.yaml if you trained Sellbird)."
+        if missing
+        else "";
 }
 
-impl QuietHoursConfig._valid_time(v: builtins.str) -> builtins.str {
-    try {
-        _time.fromisoformat(v);
-    } except ValueError {
-        raise ValueError(f"'{v}' is not a valid time. Use 24h HH:MM format, e.g. '22:00'.");
-    }
-    return v;
-}
-
-impl QuietHoursConfig._valid_timezone(v: builtins.str) -> builtins.str {
-    import pytz;
-
-    if v not in pytz.all_timezones_set {
-        raise ValueError(
-            f"'{v}' is not a valid timezone. Use an IANA name like 'America/New_York'."
-        );
-    }
-    return v;
-}
-
-impl UsageConfig._valid_percent(v: builtins.float) -> builtins.float {
-    if not 0 < v <= 100 {
-        raise ValueError("max_daily_claude_percent must be between 0 and 100");
-    }
-    return v;
-}
-
-impl UsageConfig._valid_interval(v: builtins.int) -> builtins.int {
-    if v < 1 {
-        raise ValueError("heartbeat_interval_minutes must be at least 1");
-    }
-    return v;
-}
-
-impl BrainConfig._valid_provider(v) -> builtins.str {
-    v = `str(v or "claude").strip().lower();
-    if v not in BRAIN_PROVIDERS {
-        raise ValueError(
-            "'"
-                + format(v, "")
-                + "' is not a supported brain provider. Use one of: "
-                + format(", ".join(BRAIN_PROVIDERS), "")
-                + ".",
-        );
-    }
-    return v;
-}
-
-impl BrainConfig._valid_model(v) -> builtins.str {
-    v = `str(v or "").strip();
-    if v and not _MODEL_NAME_RE.match(v) {
-        raise ValueError(f"'{v}' is not a valid model name.");
-    }
-    return v;
-}
-
-impl BrainConfig._valid_effort(v) -> builtins.str {
-    v = `str(v or "").strip().lower();
-    if v and v not in CODEX_REASONING_EFFORTS {
-        raise ValueError(
-            "'"
-                + format(v, "")
-                + "' is not a valid reasoning effort. Use one of: "
-                + format(", ".join(CODEX_REASONING_EFFORTS), "")
-                + ".",
-        );
-    }
-    return v;
-}
-
-impl WriterConfig._blank_rules(v) -> any {
-    if v is None {
-        return "";
-    }
-    return v.strip() if isinstance(v, `str) else v;
-}
-
-impl EmailRulesError.__repr__ -> str {
-    return (getattr(builtins.super(EmailRulesError, self), "__repr__") as any)();
-}
-
-impl EmailRulesError.__eq__(other: any) -> bool {
-    return self is other;
-}
-
-impl EmailRulesError.__hash__ -> int {
-    return id(self);
-}
-
-impl load_email_rules(config) -> builtins.str {
-    raw: any = `str(getattr(getattr(config, "writer", None), "email_rules", "") or "").strip();
+impl load_email_rules(config: any) -> str {
+    raw: any = str(getattr(getattr(config, "writer", None), "email_rules", "") or "").strip();
     if not raw {
         return "";
     }
     path: any = Path(raw).expanduser();
-    if not path.is_absolute() {
-        path = PROJECT_ROOT / path;
-    }
     try {
-        text: any = read_user_text(path).strip();
+        text: any = read_user_text(path if path.is_absolute() else PROJECT_ROOT / path).strip();
     } except FileNotFoundError {
         raise EmailRulesError(f"{raw} doesn't exist") from None;
     } except OSError as e {
@@ -462,11 +333,10 @@ impl load_email_rules(config) -> builtins.str {
     return text;
 }
 
-impl _format_validation_error(e: ValidationError) -> builtins.str {
-    lines: any = [];
+impl _format_validation_error(e: ValidationError) -> str {
+    lines: list[str] = [];
     for err in e.errors() {
-        loc: any = ".".join(`str(p) for p in err["loc"]) or "(root)";
-        lines.append("  - " + format(loc, "") + ": " + format(err["msg"], ""));
+        lines.append(f"  - {'.'.join([str(p) for p in err['loc']]) or '(root)'}: {err['msg']}");
     }
     return "\n".join(lines);
 }
@@ -480,23 +350,22 @@ impl use_config(config: SellbirdConfig) -> Generator[any, any, any] {
     }
 }
 
-impl current_config -> "SellbirdConfig | None" {
+impl current_config -> any {
     return _CURRENT_CONFIG.get();
 }
 
-impl load_config(config_path: builtins.str | None = None) -> SellbirdConfig {
+impl load_config(config_path: str | None = None) -> SellbirdConfig {
+    import from sellbird.workspace_home { current_home }
     if config_path is None {
         given: any = _CURRENT_CONFIG.get();
         if given is not None {
             return given;
         }
-        import from sellbird.workspace_home { current_home }
         if current_home().hosted {
             raise ConfigFileNotFoundError("This workspace's settings weren't loaded.");
         }
         config_path = _find_config_file();
     }
-
     try {
         data: any = yaml.safe_load(read_user_text(config_path));
     } except FileNotFoundError {
@@ -508,48 +377,40 @@ impl load_config(config_path: builtins.str | None = None) -> SellbirdConfig {
     } except OSError as e {
         raise ConfigError(f"Could not read {config_path}: {e}");
     }
-
     if data is None {
         raise ConfigError(f"{config_path} is empty. Run 'sellbird setup' to configure Sellbird.");
     }
-    if not isinstance(data, `dict) {
+    if not isinstance(data, dict) {
         raise ConfigError(
-            f"{config_path} must contain a YAML mapping (key: value pairs), got {`type(data).__name__}.",
+            f"{config_path} must contain a YAML mapping (key: value pairs), got {type(data).__name__}.",
         );
     }
-
     try {
         config: any = SellbirdConfig(**data);
-        config._source_path = `str(config_path);
-        return config;
     } except ValidationError as e {
         logger.error(
             f"Invalid configuration in {config_path}:\n{_format_validation_error(e)}\nFix the fields above or re-run 'sellbird setup'.",
         );
         raise;
     }
+    config._source_path = str(config_path);
+    return config;
 }
 
-impl load_brain_config(config_path: builtins.str | None = None) -> BrainConfig {
-    if config_path is None {
-        try {
-            config_path = _find_config_file();
-        } except ConfigFileNotFoundError {
-            return BrainConfig();
-        }
-    }
+impl load_brain_config(config_path: str | None = None) -> BrainConfig {
     try {
+        config_path = config_path if config_path is not None else _find_config_file();
         data: any = yaml.safe_load(read_user_text(config_path));
     } except FileNotFoundError {
         return BrainConfig();
     } except (yaml.YAMLError, OSError) as e {
         raise ConfigError(f"Could not read the brain settings in {config_path}: {e}");
     }
-    section: any = data.get("brain") if isinstance(data, `dict) else None;
+    section: any = data.get("brain") if isinstance(data, dict) else None;
     if section is None {
         return BrainConfig();
     }
-    if not isinstance(section, `dict) {
+    if not isinstance(section, dict) {
         raise ConfigError(f"'brain' in {config_path} must be a mapping.");
     }
     try {
@@ -561,45 +422,23 @@ impl load_brain_config(config_path: builtins.str | None = None) -> BrainConfig {
     }
 }
 
-impl load_env -> EnvConfig {
+impl load_env -> any {
     load_dotenv();
-    env: any = EnvConfig(
-        instantly_api_key=os.getenv("INSTANTLY_API_KEY", "").strip(),
-        dataforseo_login=os.getenv("DATAFORSEO_LOGIN", "").strip(),
-        dataforseo_password=os.getenv("DATAFORSEO_PASSWORD", "").strip(),
-        dataforseo_sandbox=os.getenv("DATAFORSEO_SANDBOX", "").strip(),
-        linkedin_email=os.getenv("LINKEDIN_EMAIL", "").strip(),
-        linkedin_password=os.getenv("LINKEDIN_PASSWORD", "").strip(),
-        hunter_api_key=os.getenv("HUNTER_API_KEY", "").strip(),
-        serper_api_key=os.getenv("SERPER_API_KEY", "").strip(),
-        scavio_api_key=os.getenv("SCAVIO_API_KEY", "").strip(),
-        tinyfish_api_key=os.getenv("TINYFISH_API_KEY", "").strip(),
-        reoon_api_key=os.getenv("REOON_API_KEY", "").strip(),
-        zerobounce_api_key=os.getenv("ZEROBOUNCE_API_KEY", "").strip(),
-        gmail_client_id=os.getenv("GMAIL_CLIENT_ID", "").strip(),
-        gmail_client_secret=os.getenv("GMAIL_CLIENT_SECRET", "").strip(),
-        smtp_host=os.getenv("SMTP_HOST", "").strip(),
-        smtp_port=`int(os.getenv("SMTP_PORT", "587").strip() or 587),
-        smtp_username=os.getenv("SMTP_USERNAME", "").strip(),
-        smtp_password=os.getenv("SMTP_PASSWORD", "").strip(),
-        imap_host=os.getenv("IMAP_HOST", "").strip(),
-        imap_port=`int(os.getenv("IMAP_PORT", "993").strip() or 993),
-        imap_username=os.getenv("IMAP_USERNAME", "").strip(),
-        imap_password=os.getenv("IMAP_PASSWORD", "").strip(),
-        m365_client_id=os.getenv("M365_CLIENT_ID", "").strip(),
-        m365_tenant_id=os.getenv("M365_TENANT_ID", "").strip(),
-        precleared_api_key=os.getenv("PRECLEARED_API_KEY", "").strip(),
+    return EnvConfig(
+        **{
+            name: os.getenv(name.upper(), str(f.default)).strip() or f.default
+            for (name, f) in EnvConfig.model_fields.items()
+        },
     );
-    return env;
 }
 
-impl _email_section(data) -> any {
-    channels: any = data.get("channels") if isinstance(data, `dict) else None;
-    email: any = channels.get("email") if isinstance(channels, `dict) else None;
-    return email if isinstance(email, `dict) else None;
+impl _email_section(data: any) -> any {
+    channels: any = data.get("channels") if isinstance(data, dict) else None;
+    email: any = channels.get("email") if isinstance(channels, dict) else None;
+    return email if isinstance(email, dict) else None;
 }
 
-impl _with_approval_line(raw: builtins.str, word: builtins.str) -> builtins.list[builtins.str] {
+impl _with_approval_line(raw: str, word: str) -> list[str] {
     m: any;
     out: any = [
         raw[:m.start("val")] + word + raw[m.end("val"):]
@@ -608,27 +447,21 @@ impl _with_approval_line(raw: builtins.str, word: builtins.str) -> builtins.list
     for m in _EMAIL_KEY_RE.finditer(raw) {
         child: any = m.group("ind") + "  ";
         for line in raw[m.end():].split("\n")[1:] {
-            if not line.strip() or line.lstrip().startswith("#") {
-                continue;
+            if line.strip() and not line.lstrip().startswith("#") {
+                indent: any = line[:len(line) - len(line.lstrip(" \t"))];
+                child = indent if len(indent) > len(m.group("ind")) else child;
+                break;
             }
-            indent: any = line[:len(line) - len(line.lstrip(" \t"))];
-            if len(indent) > len(m.group("ind")) {
-                child = indent;
-            }
-            break;
         }
         out.append(raw[:m.end()] + f"\n{child}require_approval: {word}" + raw[m.end():]);
     }
     return out;
 }
 
-impl set_require_approval(value: builtins.bool, path=None) -> Path {
-    import copy;
-    import shutil;
+impl set_require_approval(value: bool, path: any = None) -> Path {
     path = Path(path or _find_config_file());
     target: any = path.resolve();
     data_bytes: any = target.read_bytes();
-    bom: any = data_bytes.startswith(b"\xef\xbb\xbf");
     try {
         raw: any = data_bytes.decode("utf-8-sig").replace("\r\n", "\n");
     } except UnicodeDecodeError {
@@ -647,7 +480,7 @@ impl set_require_approval(value: builtins.bool, path=None) -> Path {
         );
     }
     expected: any = copy.deepcopy(data);
-    _email_section(expected)["require_approval"] = `bool(value);
+    _email_section(expected)["require_approval"] = bool(value);
     word: any = "true" if value else "false";
     new: any;
     for new in _with_approval_line(raw, word) {
@@ -659,18 +492,19 @@ impl set_require_approval(value: builtins.bool, path=None) -> Path {
             continue;
         }
         SellbirdConfig(**expected);
-        if b"\r\n" in data_bytes {
-            new = new.replace("\n", "\r\n");
-        }
+        new = new.replace("\n", "\r\n") if b"\r\n" in data_bytes else new;
         tmp: any = target.with_name(target.name + ".tmp");
         try {
-            tmp.write_bytes((b"\xef\xbb\xbf" if bom else b"") + new.encode("utf-8"));
+            tmp.write_bytes(
+                (b"\xef\xbb\xbf" if data_bytes.startswith(b"\xef\xbb\xbf") else b"")
+                    + new.encode("utf-8"),
+            );
             shutil.copymode(target, tmp);
             os.replace(tmp, target);
         } finally {
             tmp.unlink(missing_ok=True);
         }
-        _mode_cache.pop(`str(target), None);
+        _mode_cache.pop(str(target), None);
         return path;
     }
     raise ConfigError(
@@ -678,64 +512,65 @@ impl set_require_approval(value: builtins.bool, path=None) -> Path {
     );
 }
 
-impl refresh_sending_mode(config, path=None) -> builtins.bool {
+impl _reread(cache: dict[str, any], path: any, read: any) -> any {
+    target: any = Path(path).resolve();
+    st: any = target.stat();
+    stamp: any = (st.st_mtime_ns, st.st_size, st.st_ino, st.st_ctime_ns);
+    cached: any = cache.get(str(target));
+    if cached and cached[0] == stamp {
+        return cached[1];
+    }
+    value: any = read(target);
+    cache[str(target)] = (stamp, value);
+    return value;
+}
+
+impl _read_mode(target: any) -> any {
+    email: any = _email_section(yaml.safe_load(read_user_text(target)));
+    try {
+        return TypeAdapter(bool).validate_python(
+            email.get("require_approval", True) if email is not None else None
+        );
+    } except ValidationError {
+        return None;
+    }
+}
+
+impl _read_dnc(target: any) -> any {
+    try {
+        return do_not_contact_from_file(target);
+    } except Exception as e {
+        logger.warning(
+            f"compliance.do_not_contact in {target.name} couldn't be read ({e}); still using the last good list.",
+        );
+        return None;
+    }
+}
+
+impl refresh_sending_mode(config: any, path: any = None) -> bool {
     path = path or getattr(config, "_source_path", None);
     if not path {
         return False;
     }
     try {
-        target: any = Path(path).resolve();
-        st: any = target.stat();
-        stamp: any = (st.st_mtime_ns, st.st_size, st.st_ino, st.st_ctime_ns);
-        cached: any = _mode_cache.get(`str(target));
-        if cached and cached[0] == stamp {
-            value: any = cached[1];
-        } else {
-            email: any = _email_section(yaml.safe_load(read_user_text(target)));
-            value = email.get("require_approval", True) if email is not None else None;
-            try {
-                value = TypeAdapter(bool).validate_python(value);
-            } except ValidationError {
-                value = None;
-            }
-            _mode_cache[`str(target)] = (stamp, value);
-        }
+        value: any = _reread(_mode_cache, path, _read_mode);
     } except Exception {
         return False;
     }
-    if not isinstance(value, `bool) or value == config.channels.email.require_approval {
+    if not isinstance(value, bool) or value == config.channels.email.require_approval {
         return False;
     }
     config.channels.email.require_approval = value;
     return True;
 }
 
-impl live_do_not_contact(config) -> builtins.list[builtins.str] {
+impl live_do_not_contact(config: any) -> list[str] {
     compliance: any = compliance_of(config);
     path: any = getattr(config, "_source_path", None);
-    if not path {
-        return compliance.do_not_contact;
-    }
     try {
-        target: any = Path(path).resolve();
-        st: any = target.stat();
-        stamp: any = (st.st_mtime_ns, st.st_size, st.st_ino, st.st_ctime_ns);
-        cached: any = _dnc_cache.get(`str(target));
-        if cached and cached[0] == stamp {
-            value: any = cached[1];
-        } else {
-            value = None;
-            try {
-                value = do_not_contact_from_file(target);
-            } except Exception as e {
-                logger.warning(
-                    f"compliance.do_not_contact in {target.name} couldn't be read ({e}); still using the last good list.",
-                );
-            }
-            _dnc_cache[`str(target)] = (stamp, value);
-        }
+        value: any = _reread(_dnc_cache, path, _read_dnc) if path else None;
     } except OSError {
-        return compliance.do_not_contact;
+        value = None;
     }
     if value is None {
         return compliance.do_not_contact;
@@ -748,15 +583,17 @@ impl live_do_not_contact(config) -> builtins.list[builtins.str] {
     return value;
 }
 
-impl do_not_contact_from_file(path=None) -> builtins.list[builtins.str] {
+impl do_not_contact_from_file(path: any = None) -> list[str] {
     data: any = yaml.safe_load(read_user_text(path or _find_config_file()));
-    section: any = data.get("compliance") if isinstance(data, `dict) else None;
-    raw: any = section.get("do_not_contact") if isinstance(section, `dict) else None;
-    return ComplianceConfig(do_not_contact=raw).do_not_contact;
+    section: any = data.get("compliance") if isinstance(data, dict) else None;
+    return ComplianceConfig(
+        do_not_contact=section.get("do_not_contact") if isinstance(section, dict) else None
+    ).do_not_contact;
 }
 
-impl _find_config_file -> builtins.str {
+impl _find_config_file -> str {
     import from sellbird.workspace_home { current_home }
+    import from sellbird.paths { HOME_ENV, is_checkout }
     home_config: any = current_home().config_file;
     if home_config is not None {
         if not home_config.exists() {
@@ -764,28 +601,27 @@ impl _find_config_file -> builtins.str {
                 f"sellbird.yaml not found at {home_config}. Create one from sellbird.yaml.example or run 'sellbird setup'.",
             );
         }
-        return `str(home_config);
+        return str(home_config);
     }
-    import from sellbird.paths { HOME_ENV, is_checkout }
-    if is_checkout(PROJECT_ROOT) and not os.environ.get(HOME_ENV, "").strip() {
-        candidates: any = [
-            Path.cwd() / "sellbird.local.yaml",
-            PROJECT_ROOT / "sellbird.local.yaml",
-            Path.cwd() / "sellbird.yaml",
-            Path.cwd().parent / "sellbird.yaml",
-            PROJECT_ROOT / "sellbird.yaml",
+    (cwd, top) = (Path.cwd(), PROJECT_ROOT);
+    candidates: any = [top / "sellbird.local.yaml", top / "sellbird.yaml"];
+    if is_checkout(top) and not os.environ.get(HOME_ENV, "").strip() {
+        candidates = [
+            cwd / "sellbird.local.yaml",
+            top / "sellbird.local.yaml",
+            cwd / "sellbird.yaml",
+            cwd.parent / "sellbird.yaml",
+            top / "sellbird.yaml",
         ];
-    } else {
-        candidates = [PROJECT_ROOT / "sellbird.local.yaml", PROJECT_ROOT / "sellbird.yaml"];
     }
     for path in candidates {
         if path.exists() {
-            return `str(path);
+            return str(path);
         }
     }
     raise ConfigFileNotFoundError(
         "sellbird.yaml not found in "
-            + ", ".join(`str(p.parent) for p in candidates)
+            + ", ".join([str(p.parent) for p in candidates])
             + ". Create one from sellbird.yaml.example or run 'sellbird setup'.",
     );
 }
