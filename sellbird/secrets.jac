@@ -5,8 +5,7 @@ import keyring;
 import keyring.errors;
 
 glob SERVICE = "sellbird",
-     _REF = re.compile("^[a-z0-9:_-]{1,128}$"),
-     _KEYRING_ERRORS = (keyring.errors.KeyringError,);
+     _REF = re.compile("^[a-z0-9:_-]{1,128}$");
 
 class SecretStoreUnavailable(Exception) {
     def init(hosted: bool = False) {
@@ -50,25 +49,16 @@ class MemorySecretBackend {
     def __repr__ -> str {
         return "MemorySecretBackend()";
     }
-
-    def __str__ -> str {
-        return self.__repr__();
-    }
 }
 
 class SecretStore {
-    has _explicit_backend: any = None,
-        _explicit_env: any = None;
-
-    def init(backend: any = None, env: any = None) {
-        self._explicit_backend = backend;
-        self._explicit_env = env;
-    }
+    has backend: any = None,
+        env: any = None;
 
     @builtins.property
     def _backend -> any {
-        if self._explicit_backend is not None {
-            return self._explicit_backend;
+        if self.backend is not None {
+            return self.backend;
         }
         home = current_home();
         if home.secret_backend is not None {
@@ -82,10 +72,7 @@ class SecretStore {
 
     @builtins.property
     def _env -> any {
-        if self._explicit_env is not None {
-            return self._explicit_env;
-        }
-        return {} if current_home().hosted else os.environ;
+        return self.env if self.env is not None else ({} if current_home().hosted else os.environ);
     }
 
     def get(ref: str, env_var: str | None = None) -> str | None {
@@ -121,9 +108,5 @@ class SecretStore {
 
     def __repr__ -> str {
         return f"SecretStore(service={SERVICE!r})";
-    }
-
-    def __str__ -> str {
-        return self.__repr__();
     }
 }
