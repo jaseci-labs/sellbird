@@ -408,10 +408,12 @@ impl Writer._write_personal_email(prospect: any) -> dict[str, any] | None {
         known += [
             ("Location", company.location),
             ("What the company says about itself", company.description),
-            ("Tools detected on their website", ", ".join(company.tech_stack[:6])),
         ];
     }
     facts += [f"- {label}: {value}" for (label, value) in known if value];
+    if company and company.tech_stack {
+        facts.append(f"- Tools detected on their website: {', '.join(company.tech_stack[:6])}");
+    }
     for signal in company.signals[:3] if company else [] {
         facts.append(f"- Signal ({signal.get('type', 'signal')}): {signal.get('detail', '')}");
     }

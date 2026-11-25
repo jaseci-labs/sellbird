@@ -232,11 +232,12 @@ def test_signal_guide_without_a_signal_gives_the_fallback():
     assert "Use a role problem." in guide and "Name the role." not in guide
 
 
-def test_writer_no_longer_reads_the_long_playbooks():
-    import inspect
+def test_writer_no_longer_reads_the_long_playbooks(monkeypatch):
     from sellbird.brain import Brain
-    src = inspect.getsource(Brain.load_skills_for_agent)
-    assert '"writer": ["product_knowledge", "competitive_intel"]' in src
+    asked = []
+    monkeypatch.setattr(Brain, "load_skill", lambda self, name: asked.append(name) or "")
+    Brain.load_skills_for_agent(Brain.__new__(Brain), "writer")
+    assert asked == ["product_knowledge", "competitive_intel"]
 
 
 # ── Email 1 is built around your offer ────────────────────────────────────
