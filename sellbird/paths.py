@@ -25,16 +25,28 @@ from typing import Mapping
 HOME_ENV = "SELLBIRD_HOME"
 APP_DIR = "sellbird"
 
+def _package_root(module_file: str) -> Path:
+    """The package's parent. neojac builds a checkout into its own
+    ``.jac/build/``, and a package running from there is that checkout's."""
+    root = Path(module_file).resolve().parent.parent
+    if ".jac" in root.parts:
+        checkout = Path(*root.parts[:root.parts.index(".jac")])
+        if (checkout / "jac.toml").is_file():
+            return checkout
+    return root
+
+
 # Where the installed package's parent is: the checkout root for a clone,
 # site-packages for an install.
-PACKAGE_ROOT = Path(__file__).resolve().parent.parent
+PACKAGE_ROOT = _package_root(__file__)
 
 
 def is_checkout(package_root: Path) -> bool:
     """True for a source checkout, never for anything inside site-packages."""
     package_root = Path(package_root)
+    package = package_root / "sellbird"
     return ((package_root / "pyproject.toml").is_file()
-            and (package_root / "sellbird" / "__init__.py").is_file()
+            and ((package / "__init__.py").is_file() or (package / "__init__.jac").is_file())
             and "site-packages" not in package_root.parts)
 
 

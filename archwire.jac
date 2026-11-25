@@ -10,7 +10,6 @@ graph import {
     sellbird.legacy --> sellbird { adopt_legacy_env }
     sellbird.paths --> sellbird.legacy { PROJECT_ROOT }
     sellbird.pidfile --> sellbird.legacy { pid_alive, read_pid }
-    sellbird.paths --> sellbird.pidfile { PROJECT_ROOT }
     sellbird.paths --> sellbird.cli { PACKAGE_ROOT, PROJECT_ROOT, is_checkout }
     sellbird.setup --> sellbird.cli { _read_env_file, run_setup }
     sellbird.main --> sellbird.cli { main, unusable_backlog_notice }
@@ -1627,4 +1626,11 @@ graph import {
     tests.test_outbox_native --> tests.test_yc_startups { Cfg, Env }
     sellbird.dashboard --> tests.test_yc_startups;
     tests.test_dashboard_signals --> tests.test_yc_startups { client }
+    sellbird.paths ++> sellbird.pidfile { PROJECT_ROOT }
+}
+
+graph spaces {
+    space sellbird: cpython { "."; }
+    package sellbird { ship sellbird; }
+    space sellbird_dev: cpython { scripts.* | tests | tests.*; }
 }
