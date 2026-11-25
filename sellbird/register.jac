@@ -18,7 +18,7 @@ glob COLUMNS = "company website sector area fit why_selected status why_not_cont
      _WHY_STOPPED = "Drafts were rejected or blocked before sending",
      _WHY_WRITE_FAILED = "Sellbird couldn't write a draft after several tries; see the log, and fix the cause to retry",
      _WHY_RISKY = "Only a risky (catch-all) email, which your rules don't send to. Try phone, LinkedIn or the cold-email domain later.",
-     _WHY_NO_EMAIL = "but no valid email (address guessed or rejected by the verifier). Try phone, LinkedIn or a contact database.",
+     _NO_MAIL = "but no valid email (address guessed or rejected by the verifier). Try phone, LinkedIn or a contact database.",
      _WHY_IRRELEVANT = "Contacts found were not relevant (e.g. not a factory, wrong person)",
      _WHY_READY = "Deliverable email found; Sellbird will write to it on a coming cycle";
 
@@ -46,12 +46,9 @@ def company_status(
     if domain and dnc and do_not_contact_match(f"x@{domain}", dnc) {
         return ("Excluded", "On your do-not-contact list");
     }
-    listed = [
-        p
-        for p in prospects
-        if dnc and p.get("email") and do_not_contact_match(p["email"], dnc)
-    ];
-    if listed and len(listed) == len([p for p in prospects if p.get("email")]) {
+    emails = [p for p in prospects if p.get("email")];
+    listed = [p for p in emails if dnc and do_not_contact_match(p["email"], dnc)];
+    if listed and len(listed) == len(emails) {
         return ("Excluded", "Every contact here is on your do-not-contact list");
     }
     prospects = [p for p in prospects if p not in listed];
@@ -81,26 +78,18 @@ def company_status(
     statuses = {(p.get("email_status") or "") for p in live};
     has_form = any(o.get("signal_code") == "CONTACT_FORM_URL" for o in observations);
     form = " Contact form available." if has_form else "";
-    if "verified" in statuses or (send_to_risky and "risky" in statuses) {
-        return ("Ready", _WHY_READY);
-    }
-    if "risky" in statuses {
-        return (_NOT, _WHY_RISKY + form);
-    }
-    if live and statuses <= {"guess", "invalid", ""} {
-        who = ", ".join(sorted({(p.get("title") or "contact") for p in live}))[:120];
-        return (_NOT, f"Found {who}, {_WHY_NO_EMAIL}{form}");
-    }
-    if prospects and not live {
-        return (_NOT, _WHY_STOPPED if stopped else _WHY_IRRELEVANT);
-    }
-    if company.get("prospects_checked_at") {
-        return (_NOT, "Website read, but no named person or usable email on it." + form);
-    }
-    if company.get("profile_checked_at") {
-        return ("Not processed yet", _WHY_UNSEARCHED + form);
-    }
-    return ("Not processed yet", "Found by search; website not read yet");
+    who = ", ".join(sorted({(p.get("title") or "contact") for p in live}))[:120];
+    checked = "Website read, but no named person or usable email on it.";
+    rules = [
+        ("verified" in statuses or (send_to_risky and "risky" in statuses), ("Ready", _WHY_READY)),
+        ("risky" in statuses, (_NOT, _WHY_RISKY + form)),
+        (live and statuses <= {"guess", "invalid", ""}, (_NOT, f"Found {who}, {_NO_MAIL}{form}")),
+        (prospects and not live, (_NOT, _WHY_STOPPED if stopped else _WHY_IRRELEVANT)),
+        (company.get("prospects_checked_at"), (_NOT, checked + form)),
+        (company.get("profile_checked_at"), ("Not processed yet", _WHY_UNSEARCHED + form)),
+        (True, ("Not processed yet", "Found by search; website not read yet")),
+    ];
+    return next(result for (hit, result) in rules if hit);
 }
 
 def _by_company(rows: list[any]) -> dict[any, list[any]] {
@@ -111,16 +100,12 @@ def _by_company(rows: list[any]) -> dict[any, list[any]] {
     return grouped;
 }
 
-def _register_row(
-    c: any, grouped: list[any], config: any, dnc: any, risky: bool
-) -> dict[str, any] {
+def _register_row(c: any, grouped: list[any], config: any, dnc: any, risky: bool) -> any {
     (ps, outbox, obs) = [g.get(c["id"], []) for g in grouped];
     (fit, reasons) = company_fit(c, ps, obs, config, dnc);
     (status, why) = company_status(c, ps, outbox, obs, dnc, risky);
     found = f"Found via {c['source']}" if c.get("source") else "";
-    roles = dict.fromkeys(
-        (o.get("value_text") or "")[:60] for o in current_roles(obs) if o.get("value_text")
-    );
+    roles = dict.fromkeys(o["value_text"][:60] for o in current_roles(obs) if o.get("value_text"));
     return {
         "id": c["id"],
         "fit_reasons": reasons,
@@ -158,8 +143,7 @@ async def build_register(query_db: any, config: any, company_id: str | None = No
     email = getattr(getattr(config, "channels", None), "email", None);
     risky = bool(getattr(email, "send_to_risky", False));
     rows = [_register_row(c, grouped, config, dnc, risky) for c in companies];
-    rows.sort(key=lambda (r: dict[str, any]) -> any { r["fit"] }, reverse=True);
-    return rows;
+    return sorted(rows, key=lambda (r: dict[str, any]) -> any { r["fit"] }, reverse=True);
 }
 
 def _do_not_contact(config: any) -> list[str] {
