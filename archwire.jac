@@ -3,12 +3,6 @@ graph layers {
 }
 
 graph import {
-    sellbird.config --> sellbird.integrations.precleared {
-        PRECLEARED_SENDER_COUNTRIES,
-        normalize_prospect_country,
-    }
-    sellbird.send_window --> sellbird.integrations.precleared { icp_country }
-    sellbird.integrations.mail_provider --> sellbird.integrations.precleared { NATIVE_PROVIDERS }
     sellbird.collectors.discover --> scripts.diagnose_overpass { OpenStreetMap }
     sellbird.claude_runtime --> tests.conftest;
     sellbird.dashboard --> tests.conftest;
@@ -1067,6 +1061,8 @@ graph import {
     sellbird.register --> tests.test_register;
     sellbird.cli --> tests.test_accelerators_funding;
     sellbird.paths --> tests.test_login_item;
+    sellbird.dashboard --> tests.test_compliance_footer;
+    sellbird.dashboard --> tests.test_precleared_hold;
     sellbird.legacy ++> sellbird { adopt_legacy_env }
     sellbird.collectors.profile ++> sellbird.pipeline { profile_companies }
     sellbird.collectors.discover ++> sellbird.pipeline { DEFAULT_PROVIDER, run_discovery }
@@ -1509,6 +1505,12 @@ graph import {
         SignatureError,
         load_signature,
     }
+    sellbird.config ++> sellbird.integrations.precleared {
+        PRECLEARED_SENDER_COUNTRIES,
+        normalize_prospect_country,
+    }
+    sellbird.send_window ++> sellbird.integrations.precleared { icp_country }
+    sellbird.integrations.mail_provider ++> sellbird.integrations.precleared { NATIVE_PROVIDERS }
     sellbird.public_http ++> sellbird.collectors.profile { public_http_client }
     sellbird.startups ++> sellbird.collectors.profile { funding_text }
     sellbird.collectors.ats ++> sellbird.collectors.profile {
@@ -1547,8 +1549,6 @@ graph import {
     harvey ++> harvey.cli { NOTICE }
     sellbird ++> harvey.cli;
     sellbird.cli ++> harvey.cli { main as sellbird_main }
-    sellbird.dashboard --> tests.test_compliance_footer;
-    sellbird.dashboard --> tests.test_precleared_hold;
 }
 
 graph spaces {
