@@ -315,7 +315,7 @@ graph import {
         do_not_contact_from_file,
         live_do_not_contact,
     }
-    sellbird.mailboxes --> sellbird.inbox_routes {
+    sellbird.mailboxes ++> sellbird.inbox_routes {
         ConnectRefused,
         HARD_MAX_INBOX_CAP,
         MAIN,
@@ -326,16 +326,13 @@ graph import {
         connect_smtp_mailbox,
         load_inboxes,
     }
-    sellbird.secrets --> sellbird.inbox_routes { SecretStore, SecretStoreUnavailable }
-    sellbird.dashboard --> sellbird.inbox_routes;
-    sellbird.config --> sellbird.inbox_routes { load_config, load_env }
-    sellbird.integrations.mail_provider --> sellbird.inbox_routes {
+    sellbird.secrets ++> sellbird.inbox_routes { SecretStore, SecretStoreUnavailable }
+    sellbird.config ++> sellbird.inbox_routes { load_config, load_env }
+    sellbird.integrations.mail_provider ++> sellbird.inbox_routes {
         NATIVE_PROVIDERS,
         get_mail_provider,
     }
-    sellbird.integrations.gmail --> sellbird.inbox_routes { run_auth_flow }
-    sellbird.integrations.microsoft --> sellbird.inbox_routes { run_auth_flow }
-    sellbird.integrations.smtp_mail --> sellbird.inbox_routes { SmtpSettings }
+    sellbird.integrations.smtp_mail ++> sellbird.inbox_routes { SmtpSettings }
     sellbird.mailboxes --> sellbird.inbox_cli {
         ConnectRefused,
         HARD_MAX_INBOX_CAP,
