@@ -1140,6 +1140,11 @@ graph import {
     sellbird.secrets ++> sellbird.inbox_cli { SecretStore, SecretStoreUnavailable }
     sellbird.config ++> sellbird.inbox_cli { load_config, load_env }
     sellbird.state ++> sellbird.inbox_cli { StateManager }
+    sellbird.integrations.mail_provider ++> sellbird.inbox_cli {
+        NATIVE_PROVIDERS,
+        get_mail_provider,
+    }
+    sellbird.integrations.smtp_mail ++> sellbird.inbox_cli { SmtpSettings }
     sellbird.agent_policy as agent_policy ++> sellbird.dashboard;
     sellbird.dashboard_auth as auth ++> sellbird.dashboard;
     sellbird.paths ++> sellbird.dashboard { PACKAGE_ROOT, PROJECT_ROOT, is_checkout }
