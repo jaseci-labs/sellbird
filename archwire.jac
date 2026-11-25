@@ -9,11 +9,6 @@ graph import {
     }
     sellbird.send_window --> sellbird.integrations.precleared { icp_country }
     sellbird.integrations.mail_provider --> sellbird.integrations.precleared { NATIVE_PROVIDERS }
-    sellbird.dashboard_instance as dashboard_instance ++> sellbird.mcp_server;
-    sellbird.dashboard_auth ++> sellbird.mcp_server { TokenError, load_or_create_token }
-    sellbird.paths ++> sellbird.mcp_server { PROJECT_ROOT }
-    sellbird.workspace_home ++> sellbird.mcp_server { NotOnHosted }
-    sellbird.extensions as extensions ++> sellbird.mcp_server;
     sellbird.agent_policy --> sellbird.dashboard;
     sellbird.dashboard_auth --> sellbird.dashboard;
     sellbird.paths --> sellbird.dashboard { PACKAGE_ROOT, PROJECT_ROOT, is_checkout }
@@ -80,12 +75,6 @@ graph import {
     sellbird.inbox_routes --> sellbird.dashboard { router }
     sellbird.extensions --> sellbird.dashboard;
     sellbird.dashboard_instance --> sellbird.dashboard;
-    sellbird.paths --> sellbird.desktop.login_item { HOME_ENV, PROJECT_ROOT, user_home_default }
-    sellbird.dashboard_instance --> sellbird.desktop.tray;
-    sellbird.dashboard_auth --> sellbird.desktop.tray { TokenError, TokenStore }
-    sellbird.mcp_server --> sellbird.desktop.tray { base_url }
-    sellbird.desktop.login_item --> sellbird.desktop.tray;
-    sellbird.pidfile --> sellbird.desktop.tray { hold_loop_lock, release_loop_lock }
     sellbird.collectors.discover --> scripts.diagnose_overpass { OpenStreetMap }
     sellbird.claude_runtime --> tests.conftest;
     sellbird.dashboard --> tests.conftest;
@@ -1142,20 +1131,27 @@ graph import {
     sellbird.paths --> tests.test_writer_email_rules;
     sellbird.agents.sender --> tests.test_email_style;
     sellbird.register --> tests.test_register;
+    sellbird.cli --> tests.test_accelerators_funding;
     sellbird.legacy ++> sellbird { adopt_legacy_env }
     sellbird.collectors.profile ++> sellbird.pipeline { profile_companies }
     sellbird.collectors.discover ++> sellbird.pipeline { DEFAULT_PROVIDER, run_discovery }
+    sellbird.dashboard_instance as dashboard_instance ++> sellbird.mcp_server;
+    sellbird.dashboard_auth ++> sellbird.mcp_server { TokenError, load_or_create_token }
+    sellbird.paths ++> sellbird.mcp_server { PROJECT_ROOT }
+    sellbird.workspace_home ++> sellbird.mcp_server { NotOnHosted }
+    sellbird.extensions as extensions ++> sellbird.mcp_server;
     sellbird.config ++> sellbird.sending_mode { refresh_sending_mode }
     sellbird.integrations.trulyinbox ++> sellbird.deliverability { AFFILIATE_TAG, AFFILIATE_URL }
     sellbird.gate ++> sellbird.export { do_not_contact_match }
     sellbird.state ++> sellbird.export { StateManager }
-    sellbird.storage as storage ++> sellbird.export;
+    sellbird.storage ++> sellbird.export;
     sellbird.config ++> sellbird.export {
         ConfigError,
         ConfigFileNotFoundError,
         do_not_contact_from_file,
         live_do_not_contact,
     }
+    sellbird.storage as storage ++> sellbird.export;
     sellbird.config ++> sellbird.booking { operator_timezone, send_window_of }
     sellbird.cli ++> sellbird.__main__ { main }
     sellbird.config ++> sellbird.mailboxes { WarmupConfig, cold_daily_cap }
@@ -1216,6 +1212,7 @@ graph import {
     sellbird.config ++> sellbird.register { ComplianceConfig, live_do_not_contact }
     sellbird.fit ++> sellbird.register { company_fit, current_roles }
     sellbird.gate ++> sellbird.register { do_not_contact_match }
+    sellbird.storage ++> sellbird.register;
     sellbird.storage as storage ++> sellbird.register;
     sellbird.extensions as extensions ++> sellbird.agent_policy;
     sellbird.paths ++> sellbird.legacy { PROJECT_ROOT }
@@ -1539,11 +1536,17 @@ graph import {
         nfc,
         ProfileCollector,
     }
+    sellbird.paths ++> sellbird.desktop.login_item { HOME_ENV, PROJECT_ROOT, user_home_default }
+    sellbird.dashboard_instance as dashboard_instance ++> sellbird.desktop.tray;
+    sellbird.dashboard_auth ++> sellbird.desktop.tray { TokenError, TokenStore }
+    sellbird.mcp_server ++> sellbird.desktop.tray { base_url }
+    sellbird.desktop.login_item as login_item ++> sellbird.desktop.tray;
+    sellbird.pidfile ++> sellbird.desktop.tray { hold_loop_lock, release_loop_lock }
     harvey.cli ++> harvey.__main__ { main }
     harvey ++> harvey.cli { NOTICE }
     sellbird ++> harvey.cli;
     sellbird.cli ++> harvey.cli { main as sellbird_main }
-    sellbird.cli --> tests.test_accelerators_funding;
+    sellbird.paths --> tests.test_login_item;
 }
 
 graph spaces {
