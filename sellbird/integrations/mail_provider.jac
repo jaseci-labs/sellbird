@@ -8,7 +8,7 @@ import threading;
 import urllib.parse;
 import webbrowser;
 import from abc { ABC, abstractmethod }
-import from collections.abc { Callable, Sequence }
+import from collections.abc { Sequence }
 import from dataclasses { dataclass, field }
 import from email.message { EmailMessage }
 import from typing { Protocol }
@@ -16,36 +16,28 @@ import from typing { Protocol }
 glob logger: any = logging.getLogger("sellbird.mail"),
      token_urlsafe: any = importlib.import_module("secrets").token_urlsafe,
      NATIVE_PROVIDERS: any = ("gmail", "smtp", "microsoft"),
-     _PROVIDER_CLASSES: dict[str, tuple[str, str]] = {
-         "gmail": ("gmail", "GmailProvider"),
-         "smtp": ("smtp_mail", "SmtpImapProvider"),
-         "microsoft": ("microsoft", "MicrosoftProvider"),
+     _PROVIDER_CLASSES: dict[str, str] = {
+         "gmail": "gmail.GmailProvider",
+         "smtp": "smtp_mail.SmtpImapProvider",
+         "microsoft": "microsoft.MicrosoftProvider",
      },
      INBOX_NOT_CONNECTED: any = "This inbox isn't connected, or its saved sign-in can't be read. Connect it again.",
      BOUNCE_SENDERS: any = ("mailer-daemon", "postmaster", "mail delivery subsystem"),
-     BOUNCE_SUBJECTS: any = tuple(
-         "delivery status notification|undeliverable|returned mail|delivery failure|failure notice|could not be delivered|delivery incomplete|address not found".split(
-             "|"
-         ),
-     ),
+     _BOUNCE_SUBJECTS = "delivery status notification|undeliverable|returned mail|delivery failure|failure notice|could not be delivered|delivery incomplete|address not found",
+     BOUNCE_SUBJECTS: any = tuple(_BOUNCE_SUBJECTS.split("|")),
      _ATTRIBUTION_HEADERS: any = tuple(
-         re.compile(
-             "^[ \\t]*" + lead + "\\b[^\\n]{0,300}(?:\\n[^\\n]{0,300})?\\b" + tail + "[ \\t]*$",
-             re.MULTILINE,
-         )
-         for (lead, tail) in [
-             ("On", "wrote:"),
-             ("El", "escribi[oó]:"),
-             ("Am", "schrieb[^\\n]{0,100}:"),
-             ("Le", "a [ée]crit[ \\t]*:"),
+         re.compile(r"^[ \t]*" + head + r"[ \t]*$", re.MULTILINE)
+         for head in [
+             r"On\b[^\n]{0,300}(?:\n[^\n]{0,300})?\bwrote:",
+             r"El\b[^\n]{0,300}(?:\n[^\n]{0,300})?\bescribi[oó]:",
+             r"Am\b[^\n]{0,300}(?:\n[^\n]{0,300})?\bschrieb[^\n]{0,100}:",
+             r"Le\b[^\n]{0,300}(?:\n[^\n]{0,300})?\ba [ée]crit[ \t]*:",
          ],
      ),
      _BLOCK_HEADERS: any = (
+         re.compile(r"^[ \t]*-{2,}[ \t]*Original Message[ \t]*-{2,}", re.MULTILINE | re.IGNORECASE),
          re.compile(
-             "^[ \\t]*-{2,}[ \\t]*Original Message[ \\t]*-{2,}", re.MULTILINE | re.IGNORECASE
-         ),
-         re.compile(
-             "^[ \\t]*(?:_{10,}[ \\t]*\\n[ \\t]*)?(?:From|Von|De):[^\\n]*\\n[ \\t]*(?:Sent|Date|Gesendet|Enviado|Envoy[ée]):",
+             r"^[ \t]*(?:_{10,}[ \t]*\n[ \t]*)?(?:From|Von|De):[^\n]*\n[ \t]*(?:Sent|Date|Gesendet|Enviado|Envoy[ée]):",
              re.MULTILINE,
          ),
      );
@@ -67,10 +59,8 @@ class MailIdentity {
 
 def identity_from_config(config: any) -> MailIdentity {
     persona = getattr(config, "persona", None);
-    return MailIdentity(
-        address=(getattr(persona, "email", "") or "").strip(),
-        display_name=getattr(persona, "name", "") or "",
-    );
+    email = (getattr(persona, "email", "") or "").strip();
+    return MailIdentity(address=email, display_name=getattr(persona, "name", "") or "");
 }
 
 class TokenSource(Protocol) {
@@ -87,10 +77,7 @@ def missing_token_text(tokens: any, main_mailbox_text: str) -> str {
 }
 
 def save_if_signed_in_as(
-    record: builtins.dict,
-    expected_address: str | None,
-    read_address: Callable[[], str],
-    save: Callable[[builtins.dict], None],
+    record: builtins.dict, expected_address: str | None, read_address: any, save: any
 ) -> bool {
     if expected_address {
         expected = expected_address.strip().lower();
@@ -134,20 +121,18 @@ def strip_quoted_reply(body: str) -> str {
     cut = min([len(text)] + [m.start() for m in [p.search(text) for p in _BLOCK_HEADERS] if m]);
     head = text[:cut];
     for pattern in _ATTRIBUTION_HEADERS {
-        m = pattern.search(head);
-        if m {
+        if m := pattern.search(head) {
             below = head[m.end():];
             marked = any([l.lstrip().startswith(">") for l in below.split("\n")]);
             head = head[:m.start()] + ("\n" + below if marked else "");
         }
     }
     kept = _unquoted(head).strip() or _unquoted(text).strip();
-    return re.sub("\\n{3,}", "\n\n", kept);
+    return re.sub(r"\n{3,}", "\n\n", kept);
 }
 
 def looks_like_bounce(from_email: str, subject: str) -> bool {
-    f = (from_email or "").lower();
-    s = (subject or "").lower();
+    (f, s) = ((from_email or "").lower(), (subject or "").lower());
     return any([m in f for m in BOUNCE_SENDERS]) or any([m in s for m in BOUNCE_SUBJECTS]);
 }
 
@@ -182,33 +167,21 @@ def get_mail_provider(config: any, env: any) -> MailProvider | None {
     if found is None {
         return None;
     }
-    (module, cls) = found;
+    (module, cls) = found.split(".");
     return getattr(importlib.import_module(f"sellbird.integrations.{module}"), cls)(config, env);
 }
 
 def compose(
-    to_email: str,
-    sender: str,
-    subject: str,
-    body: str,
-    sig: any,
-    headers: any,
-    in_reply_to: str,
-    message_id: str = "",
+    to: str, sender: str, subject: str, body: str, sig: any, headers: any, ref: str, mid: str = ""
 ) -> EmailMessage {
     msg = EmailMessage();
-    msg["To"] = to_email;
-    msg["From"] = sender;
-    msg["Subject"] = subject;
-    for (name, value) in headers {
+    for (name, value) in [("To", to), ("From", sender), ("Subject", subject), *headers] {
         msg[name] = value;
     }
-    if message_id {
-        msg["Message-ID"] = message_id;
-    }
-    if in_reply_to {
-        msg["In-Reply-To"] = in_reply_to;
-        msg["References"] = in_reply_to;
+    for (name, value) in [("Message-ID", mid), ("In-Reply-To", ref), ("References", ref)] {
+        if value {
+            msg[name] = value;
+        }
     }
     set_body(msg, body, sig);
     return msg;
@@ -235,13 +208,7 @@ def write_token_file(path: any, data: builtins.dict) {
 }
 
 def loopback_code(
-    auth_url: str,
-    state: str,
-    signer: str,
-    service: str,
-    servers: list[any],
-    port: int,
-    error_keys: tuple[str, ...],
+    auth_url: str, state: str, signer: str, service: str, servers: any, port: int, error_keys: any
 ) -> builtins.dict | None {
     result: builtins.dict = {};
     done = threading.Event();
