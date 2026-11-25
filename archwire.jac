@@ -179,7 +179,7 @@ graph import {
     sellbird.integrations.gmail --> sellbird.mailboxes { GmailProvider }
     sellbird.integrations.microsoft --> sellbird.mailboxes { MicrosoftProvider }
     sellbird.extensions --> sellbird.mailboxes;
-    sellbird.workspace_home --> sellbird.secrets { current_home }
+    sellbird.workspace_home ++> sellbird.secrets { current_home }
     sellbird.public_http --> sellbird.collectors.profile { public_http_client }
     sellbird.startups --> sellbird.collectors.profile { funding_text }
     sellbird.collectors.ats --> sellbird.collectors.profile {
