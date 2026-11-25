@@ -239,15 +239,15 @@ graph import {
     sellbird.integrations.tech_detect --> sellbird.agents.scout { detect_tech }
     sellbird.collectors.ats --> sellbird.agents.scout { role_keywords }
     sellbird.paths --> sellbird.integrations.linkedin { PROJECT_ROOT }
-    sellbird.brain --> sellbird.agents.writer { Brain }
-    sellbird.config --> sellbird.agents.writer {
+    sellbird.brain ++> sellbird.agents.writer { Brain }
+    sellbird.config ++> sellbird.agents.writer {
         EmailRulesError,
         SellbirdConfig,
         compliance_of,
         load_config,
         load_email_rules,
     }
-    sellbird.email_style --> sellbird.agents.writer {
+    sellbird.email_style ++> sellbird.agents.writer {
         BREAKUP_MAX_WORDS,
         FIRST_EMAIL_MAX_WORDS,
         FOLLOW_UP_MAX_WORDS,
@@ -255,15 +255,15 @@ graph import {
         tidy,
         with_sign_off,
     }
-    sellbird.humanize --> sellbird.agents.writer { humanize, humanizer_enabled }
-    sellbird.integrations.mail_provider --> sellbird.agents.writer { NATIVE_PROVIDERS }
-    sellbird.models.campaign --> sellbird.agents.writer { Campaign, EmailStep }
-    sellbird.state --> sellbird.agents.writer { StateManager, WRITABLE_EMAIL_STATUSES }
-    sellbird.sending_mode --> sellbird.agents.writer { sync_sending_mode }
-    sellbird.site_facts --> sellbird.agents.writer { site_facts }
-    sellbird.startups --> sellbird.agents.writer { startup_facts }
-    sellbird.untrusted --> sellbird.agents.writer { UNTRUSTED_RULE, fence }
-    sellbird.workspace_home --> sellbird.agents.writer { current_home }
+    sellbird.humanize ++> sellbird.agents.writer { humanize, humanizer_enabled }
+    sellbird.integrations.mail_provider ++> sellbird.agents.writer { NATIVE_PROVIDERS }
+    sellbird.models.campaign ++> sellbird.agents.writer { Campaign, EmailStep }
+    sellbird.state ++> sellbird.agents.writer { StateManager, WRITABLE_EMAIL_STATUSES }
+    sellbird.sending_mode ++> sellbird.agents.writer { sync_sending_mode }
+    sellbird.site_facts ++> sellbird.agents.writer { site_facts }
+    sellbird.startups ++> sellbird.agents.writer { startup_facts }
+    sellbird.untrusted ++> sellbird.agents.writer { UNTRUSTED_RULE, fence }
+    sellbird.workspace_home ++> sellbird.agents.writer { current_home }
     sellbird.brain --> sellbird.agents.sender { Brain }
     sellbird.config --> sellbird.agents.sender {
         EnvConfig,
