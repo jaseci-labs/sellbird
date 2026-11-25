@@ -116,7 +116,7 @@ files = [
     "sellbird/handoff.jac",
     "sellbird/home.jac",
     "sellbird/humanize.jac",
-    "sellbird/inbox_cli.py",
+    "sellbird/inbox_cli.jac",
     "sellbird/inbox_routes.jac",
     "sellbird/integrations/__init__.jac",
     "sellbird/integrations/email_finder.jac",

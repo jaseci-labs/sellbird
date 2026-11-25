@@ -340,6 +340,11 @@ graph import {
     }
     sellbird.integrations.smtp_mail ++> sellbird.inbox_routes { SmtpSettings }
     sellbird.mailboxes --> sellbird.inbox_cli {
+    }
+    sellbird.integrations.gmail --> sellbird.inbox_routes { run_auth_flow }
+    sellbird.integrations.microsoft --> sellbird.inbox_routes { run_auth_flow }
+    sellbird.integrations.smtp_mail --> sellbird.inbox_routes { SmtpSettings }
+    sellbird.mailboxes ++> sellbird.inbox_cli {
         ConnectRefused,
         HARD_MAX_INBOX_CAP,
         MAIN,
@@ -350,16 +355,9 @@ graph import {
         connect_smtp_mailbox,
         load_inboxes,
     }
-    sellbird.secrets --> sellbird.inbox_cli { SecretStore, SecretStoreUnavailable }
-    sellbird.integrations.mail_provider --> sellbird.inbox_cli {
-        NATIVE_PROVIDERS,
-        get_mail_provider,
-    }
-    sellbird.integrations.gmail --> sellbird.inbox_cli { run_auth_flow }
-    sellbird.integrations.microsoft --> sellbird.inbox_cli { run_auth_flow }
-    sellbird.integrations.smtp_mail --> sellbird.inbox_cli { SmtpSettings }
-    sellbird.config --> sellbird.inbox_cli { load_config, load_env }
-    sellbird.state --> sellbird.inbox_cli { StateManager }
+    sellbird.secrets ++> sellbird.inbox_cli { SecretStore, SecretStoreUnavailable }
+    sellbird.config ++> sellbird.inbox_cli { load_config, load_env }
+    sellbird.state ++> sellbird.inbox_cli { StateManager }
     sellbird.paths ++> sellbird.desktop_cli { PROJECT_ROOT }
     sellbird.logsafety ++> sellbird.desktop_cli { RedactSecrets }
     sellbird.paths --> sellbird.desktop.login_item { HOME_ENV, PROJECT_ROOT, user_home_default }
