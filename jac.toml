@@ -136,7 +136,7 @@ files = [
     "sellbird/mailboxes.jac",
     "sellbird/main.jac",
     "sellbird/mcp_install.jac",
-    "sellbird/mcp_server.py",
+    "sellbird/mcp_server.jac",
     "sellbird/models/__init__.jac",
     "sellbird/models/campaign.jac",
     "sellbird/models/company.jac",

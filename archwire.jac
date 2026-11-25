@@ -9,11 +9,11 @@ graph import {
     }
     sellbird.send_window --> sellbird.integrations.precleared { icp_country }
     sellbird.integrations.mail_provider --> sellbird.integrations.precleared { NATIVE_PROVIDERS }
-    sellbird.dashboard_instance --> sellbird.mcp_server;
-    sellbird.dashboard_auth --> sellbird.mcp_server { TokenError, load_or_create_token }
-    sellbird.paths --> sellbird.mcp_server { PROJECT_ROOT }
-    sellbird.workspace_home --> sellbird.mcp_server { NotOnHosted }
-    sellbird.extensions --> sellbird.mcp_server;
+    sellbird.dashboard_instance as dashboard_instance ++> sellbird.mcp_server;
+    sellbird.dashboard_auth ++> sellbird.mcp_server { TokenError, load_or_create_token }
+    sellbird.paths ++> sellbird.mcp_server { PROJECT_ROOT }
+    sellbird.workspace_home ++> sellbird.mcp_server { NotOnHosted }
+    sellbird.extensions as extensions ++> sellbird.mcp_server;
     sellbird.agent_policy --> sellbird.dashboard;
     sellbird.dashboard_auth --> sellbird.dashboard;
     sellbird.paths --> sellbird.dashboard { PACKAGE_ROOT, PROJECT_ROOT, is_checkout }
