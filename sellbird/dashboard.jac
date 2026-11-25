@@ -15,6 +15,7 @@ import subprocess;
 import sys;
 import tempfile;
 import uuid;
+import from collections { Counter }
 import from collections.abc { Sequence }
 import from datetime { date, datetime, timedelta, timezone }
 import from pathlib { Path }
@@ -66,6 +67,11 @@ glob logger = logging.getLogger("sellbird.dashboard"),
          "cloudflare|Cloudflare deep crawling|Optional. For JavaScript-rendered website crawling during training.|n",
          "warmup_service|{warmup}|A new mailbox needs 2-4 weeks of warmup before cold email, and warmup keeps it out of spam after that. We recommend TrulyInbox: connect it and Sellbird shows whether your mailbox is warmed.|y",
      ],
+     _VERIFIER_KEYS = "REOON_API_KEY ZEROBOUNCE_API_KEY HUNTER_API_KEY".split(),
+     _WARMUP = {
+         "connected": "Warmup: TrulyInbox connected",
+         "other": "Warmup: your own warmup service",
+     },
      _NO_OFFERS = "Sellbird couldn't come up with offers just now. Try again.",
      _EMPTY: dict[str, any] = {},
      COMPANIES_TAB_LIMIT = 2000;
@@ -115,6 +121,29 @@ def _error(message: str, code: int = 500) -> any {
     return JSONResponse({"error": message}, status_code=code);
 }
 
+def _not_ok(message: str, code: int) -> any {
+    return JSONResponse({"ok": False, "message": message}, status_code=code);
+}
+
+obj _Guarded {
+    has route: any, answer: any;
+
+    async def __call__(*args: any, **kwargs: any) -> any {
+        try {
+            return await self.route(*args, **kwargs);
+        } except Exception as e {
+            return self.answer(e);
+        }
+    }
+}
+
+def _on_error(answer: any) -> any {
+    return lambda (route: any) -> any { functools.update_wrapper(_Guarded(route, answer), route) };
+}
+
+glob _OR_500 = _on_error(lambda (e: any) -> any { _refuse(str(e), 500) }),
+     _OR_ERROR = _on_error(lambda (e: any) -> any { dict(error=str(e)) });
+
 def _csv(text: str, filename: str) -> any {
     return PlainTextResponse(
         text,
@@ -146,6 +175,10 @@ async def _json_if_json(request: any) -> any {
         return {};
     }
     return (await request.json()) or {};
+}
+
+def _dict(value: any) -> dict[any, any] {
+    return value if isinstance(value, dict) else {};
 }
 
 def _loads(text: any, fallback: any) -> any {
@@ -273,6 +306,21 @@ def _has(env_vars: dict[str, str], keys: any) -> bool {
     return True;
 }
 
+def _all_set(env_vars: dict[str, str], keys: str) -> bool {
+    return all(_env_value(env_vars, k) for k in keys.split());
+}
+
+def _setup_check(spec: list[str], done: dict[str, any], names: dict[str, any]) -> dict[str, any] {
+    (id, label, help, needed) = spec;
+    return {
+        "id": id,
+        "label": label.format(**names),
+        "done": done[id],
+        "required": needed == "y",
+        "help": help.format(**names),
+    };
+}
+
 def _config_valid(config_path: any) -> bool {
     if not config_path.exists() {
         return False;
@@ -313,39 +361,20 @@ async def get_setup_status -> any {
         "venv": (not is_checkout(PACKAGE_ROOT)) or (PACKAGE_ROOT / ".venv").is_dir(),
         "env_file": ENV_FILE.exists() and bool(env_vars),
         "email_provider": provider_done,
-        "verifier": any(
-            _has(env_vars, [k]) for k in ("REOON_API_KEY", "ZEROBOUNCE_API_KEY", "HUNTER_API_KEY")
-        ),
+        "verifier": any(_has(env_vars, [k]) for k in _VERIFIER_KEYS),
         "config": _config_valid(config_path),
         "product_trained": (PROJECT_ROOT / "skills" / "product_knowledge.md").exists(),
-        "linkedin": all(_env_value(env_vars, k) for k in ("LINKEDIN_EMAIL", "LINKEDIN_PASSWORD")),
-        "cloudflare": all(
-            _env_value(env_vars, k) for k in ("CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN")
-        ),
+        "linkedin": _all_set(env_vars, "LINKEDIN_EMAIL LINKEDIN_PASSWORD"),
+        "cloudflare": _all_set(env_vars, "CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_API_TOKEN"),
         "warmup_service": bool(choice),
-    };
-    warmup = {
-        "connected": "Warmup: TrulyInbox connected",
-        "other": "Warmup: your own warmup service",
     };
     names = {
         "provider": provider,
         "provider_help": provider_help,
         "config": config_path.name,
-        "warmup": warmup.get(choice, "Warm up your mailbox"),
+        "warmup": _WARMUP.get(choice, "Warm up your mailbox"),
     };
-    checks: list[any] = [];
-    for spec in _SETUP_CHECKS {
-        (id, label, help, needed) = spec.split("|");
-        check = {
-            "id": id,
-            "label": label.format(**names),
-            "done": done[id],
-            "required": needed == "y",
-            "help": help.format(**names),
-        };
-        checks.append(check);
-    }
+    checks = [_setup_check(spec.split("|"), done, names) for spec in _SETUP_CHECKS];
     checks[-1]["required"] = provider != "instantly";
     checks[-1]["link"] = ti.AFFILIATE_URL;
     required = [c for c in checks if c["required"]];
@@ -418,11 +447,7 @@ async def save_env_settings(request: Request) -> any {
                 logger.warning("Failed to write .env: %s", e);
                 return {"success": False, "message": "Could not write .env file."};
             }
-            for key in _SIGN_IN_KEYS {
-                if key in updates {
-                    os.environ[key] = updates[key];
-                }
-            }
+            os.environ.update({k: updates[k] for k in _SIGN_IN_KEYS if k in updates});
         }
     }
     return {"success": True};
@@ -529,16 +554,14 @@ async def suggest_offer -> any {
 async def preview_offer(request: Request) -> any {
     offer = _words((await _json_if_json(request)).get("entry"), MAX_OFFER_CHARS);
     if not offer {
-        return JSONResponse({"ok": False, "message": "Write an offer first."}, status_code=400);
+        return _not_ok("Write an offer first.", 400);
     }
     try {
         (brain, state, config) = await _offer_brain();
         return await preview_email(brain, state, config, offer);
     } except Exception as e {
         logger.warning(f"Offer preview failed: {e}");
-        return JSONResponse(
-            {"ok": False, "message": "The preview failed. Try again."}, status_code=502
-        );
+        return _not_ok("The preview failed. Try again.", 502);
     }
 }
 
@@ -593,7 +616,7 @@ async def propose_offer(request: Request) -> any {
     offer = _words(body.get("entry"), MAX_OFFER_CHARS);
     why = _words(body.get("why"), 500);
     if not offer {
-        return JSONResponse({"ok": False, "message": "An offer is required."}, status_code=400);
+        return _not_ok("An offer is required.", 400);
     }
     proposal = {"entry": offer, "why": why, "at": datetime.now(timezone.utc).isoformat()};
     await (await _open_state()).set_setting(PROPOSED_KEY, json.dumps(proposal));
@@ -617,21 +640,16 @@ async def test_instantly(request: Request) -> any {
     }
     try {
         async with httpx.AsyncClient(timeout=10) as client {
-            resp = await client.get(
-                "https://api.instantly.ai/api/v2/accounts",
-                headers={"Authorization": f"Bearer {api_key}"},
-            );
-            if resp.status_code == 200 {
-                return {"success": True, "message": "Connected to Instantly."};
-            }
-            return {
-                "success": False,
-                "message": f"API returned {resp.status_code}. Check your key.",
-            };
+            url = "https://api.instantly.ai/api/v2/accounts";
+            resp = await client.get(url, headers={"Authorization": f"Bearer {api_key}"});
         }
     } except Exception as e {
         return {"success": False, "message": f"Connection failed: {str(e)}"};
     }
+    if resp.status_code == 200 {
+        return {"success": True, "message": "Connected to Instantly."};
+    }
+    return {"success": False, "message": f"API returned {resp.status_code}. Check your key."};
 }
 
 @app.get("/api/companies")
@@ -701,10 +719,7 @@ async def get_company_contacts(company_id: str) -> any {
 
 @app.post("/api/feedback")
 async def add_feedback(request: Request) -> any {
-    data = await _json(request, {});
-    if not isinstance(data, dict) {
-        data = {};
-    }
+    data = _dict(await _json(request, {}));
     entity_type = str(data.get("entity_type", "") or "")[:50];
     entity_id = str(data.get("entity_id", "") or "")[:100];
     comment = str(data.get("comment", "") or "").strip()[:4000];
@@ -762,10 +777,8 @@ async def start_sellbird -> any {
         return {"success": False, "message": "Sellbird is already running."};
     }
     if _needs_setup() {
-        return {
-            "success": False,
-            "message": "Sellbird isn't set up yet. Run `sellbird setup` in a terminal first.",
-        };
+        message = "Sellbird isn't set up yet. Run `sellbird setup` in a terminal first.";
+        return {"success": False, "message": message};
     }
     (PROJECT_ROOT / "data").mkdir(parents=True, exist_ok=True);
     env = os.environ.copy();
@@ -774,19 +787,16 @@ async def start_sellbird -> any {
         env["PATH"] = str(local_bin) + os.pathsep + env.get("PATH", "");
     }
     try {
-        log_handle = open(LOG_FILE, "a", encoding="utf-8");
-        try {
+        with open(LOG_FILE, "a", encoding="utf-8") as log {
             _sellbird_process = subprocess.Popen(
                 [sys.executable, "-m", "sellbird", "run"],
                 cwd=str(PROJECT_ROOT),
                 stdin=subprocess.DEVNULL,
-                stdout=log_handle,
-                stderr=log_handle,
+                stdout=log,
+                stderr=log,
                 start_new_session=True,
                 env=env,
             );
-        } finally {
-            log_handle.close();
         }
     } except Exception as e {
         logger.warning("Failed to start Sellbird: %s", e);
@@ -809,15 +819,12 @@ async def stop_sellbird -> any {
     mine = _sellbird_process if _sellbird_process and _sellbird_process.pid == pid else None;
     try {
         os.kill(pid, signal.SIGTERM);
-        stopped = False;
         for _ in range(10) {
-            stopped = not _alive(mine, pid);
-            if stopped {
+            if not _alive(mine, pid) {
                 break;
             }
             await asyncio.sleep(0.5);
-        }
-        if not stopped {
+        } else {
             try {
                 os.kill(pid, getattr(signal, "SIGKILL", signal.SIGTERM));
             } except OSError {}
@@ -827,10 +834,8 @@ async def stop_sellbird -> any {
         logger.warning("Couldn't signal Sellbird (pid %s): %s", pid, e);
     }
     if _alive(mine, pid) {
-        return {
-            "success": False,
-            "message": f"Couldn't stop Sellbird (pid {pid}). Stop it where it was started.",
-        };
+        message = f"Couldn't stop Sellbird (pid {pid}). Stop it where it was started.";
+        return {"success": False, "message": message};
     }
     _sellbird_process = None;
     _sellbird_started_at = None;
@@ -884,44 +889,42 @@ async def _count_map(table: str) -> dict[any, any] {
 }
 
 @app.get("/api/stats")
+@_OR_ERROR
 async def get_stats -> any {
-    try {
-        prospect_map = await _count_map("prospects");
-        campaign_map = await _count_map("campaigns");
-        convo_map = await _count_map("conversations");
-        rows = await query_db(
-            "SELECT p.status, p.email_status, l.stage, l.intent, COUNT(*) AS count FROM prospects p "
-                "LEFT JOIN (SELECT prospect_id, stage, intent, ROW_NUMBER() OVER ("
-                "PARTITION BY prospect_id ORDER BY updated_at DESC, created_at DESC) AS rn "
-                "FROM conversations) l ON l.prospect_id = p.id AND l.rn = 1 "
-                "GROUP BY p.status, p.email_status, l.stage, l.intent",
-        );
-        pipeline = dict.fromkeys(
-            ("to_write", "contacted", "replied", "interested", "ready_to_meet", "closed_out"), 0
-        );
-        for r in rows {
-            pipeline[_pipeline_bucket(
-                r["status"], r["stage"], r["intent"], r["email_status"]
-            )] += r["count"];
-        }
-        usage = await query_db(
-            "SELECT claude_calls, codex_calls FROM usage_log WHERE date = ?",
-            (date.today().isoformat(),),
-        );
-        return {
-            "prospects": {"total": sum(prospect_map.values()), "by_status": prospect_map},
-            "campaigns": {"total": sum(campaign_map.values()), "by_status": campaign_map},
-            "conversations": {"total": sum(convo_map.values()), "by_status": convo_map},
-            "pipeline": pipeline,
-            "actions_total": await _scalar("SELECT COUNT(*) as count FROM actions"),
-            "claude_calls_today": (usage[0]["claude_calls"] or 0) if usage else 0,
-            "codex_calls_today": (usage[0]["codex_calls"] or 0) if usage else 0,
-            "brain_provider": _active_provider(),
-            "brain_status": await _brain_status(),
-        };
-    } except Exception as e {
-        return {"error": str(e)};
+    out: dict[str, any] = {};
+    for table in ("prospects", "campaigns", "conversations") {
+        found = await _count_map(table);
+        out[table] = {"total": sum(found.values()), "by_status": found};
     }
+    rows = await query_db(
+        "SELECT p.status, p.email_status, l.stage, l.intent, COUNT(*) AS count FROM prospects p "
+            "LEFT JOIN (SELECT prospect_id, stage, intent, ROW_NUMBER() OVER ("
+            "PARTITION BY prospect_id ORDER BY updated_at DESC, created_at DESC) AS rn "
+            "FROM conversations) l ON l.prospect_id = p.id AND l.rn = 1 "
+            "GROUP BY p.status, p.email_status, l.stage, l.intent",
+    );
+    pipeline = dict.fromkeys(
+        "to_write contacted replied interested ready_to_meet closed_out".split(), 0
+    );
+    for r in rows {
+        pipeline[_pipeline_bucket(
+            r["status"], r["stage"], r["intent"], r["email_status"]
+        )] += r["count"];
+    }
+    usage = await query_db(
+        "SELECT claude_calls, codex_calls FROM usage_log WHERE date = ?",
+        (date.today().isoformat(),),
+    );
+    today = usage[0] if usage else {};
+    return {
+        **out,
+        "pipeline": pipeline,
+        "actions_total": await _scalar("SELECT COUNT(*) as count FROM actions"),
+        "claude_calls_today": today.get("claude_calls") or 0,
+        "codex_calls_today": today.get("codex_calls") or 0,
+        "brain_provider": _active_provider(),
+        "brain_status": await _brain_status(),
+    };
 }
 
 glob _USAGE_SUM = ("COUNT(DISTINCT CASE WHEN session_id != '' THEN session_id ELSE id END) AS calls, "
@@ -978,15 +981,11 @@ async def get_usage -> any {
         rows = await query_db(f"SELECT {_USAGE_SUM} FROM usage_events WHERE {where}");
         totals[label] = rows[0] if rows else {};
     }
-    by_agent = await query_db(
-        _usage_grouped("CASE WHEN agent = '' THEN 'other' ELSE agent END", "agent")
-    );
-    by_task = await query_db(
-        _usage_grouped("CASE WHEN task = '' THEN 'other' ELSE task END", "task")
-    );
-    by_model = await query_db(
-        _usage_grouped("CASE WHEN model = '' THEN 'unknown' ELSE model END", "model")
-    );
+    grouped: dict[str, any] = {};
+    for (alias, blank) in (("agent", "other"), ("task", "other"), ("model", "unknown")) {
+        expr = f"CASE WHEN {alias} = '' THEN '{blank}' ELSE {alias} END";
+        grouped["by_" + alias] = await query_db(_usage_grouped(expr, alias));
+    }
     by_provider = await query_db(_usage_grouped("provider", "provider"));
     by_day = await query_db(
         f"SELECT date(created_at) AS day, {_USAGE_SUM} FROM usage_events WHERE created_at >= datetime('now', '-30 days') GROUP BY day ORDER BY day ASC",
@@ -1010,9 +1009,7 @@ async def get_usage -> any {
         "by_provider": by_provider,
         "totals": totals,
         "by_day": by_day,
-        "by_agent": by_agent,
-        "by_task": by_task,
-        "by_model": by_model,
+        **grouped,
     };
 }
 
@@ -1053,97 +1050,89 @@ def _joined(values: any, sep: str = ", ") -> str {
     return sep.join(filter(None, values));
 }
 
-async def _with_context(items: list[any]) -> list[any] {
-    if not items {
-        return items;
+async def _rows_in(sql: str, ids: any, more: tuple[any, ...] = ()) -> list[any] {
+    if not ids {
+        return [];
     }
+    return await query_db(sql.replace("IN (?)", f"IN ({_in(ids)})", 1), (*ids, *more));
+}
+
+async def _with_context(items: list[any]) -> list[any] {
     pids = sorted({i["prospect_id"] for i in items if i.get("prospect_id")});
     cids = sorted({i["campaign_id"] for i in items if i.get("campaign_id")});
-    people_rows = await query_db(
+    people_rows = await _rows_in(
         "SELECT p.id, p.first_name, p.last_name, p.title, p.source, p.email_status, "
             "p.score, p.personalization_notes, p.company_id, c.name AS company_name, "
             "c.domain, c.website, c.description, c.industry AS found_by "
-            f"FROM prospects p LEFT JOIN companies c ON c.id = p.company_id WHERE p.id IN ({_in(pids)})",
-        tuple(pids),
-    )
-        if pids
-        else [];
+            "FROM prospects p LEFT JOIN companies c ON c.id = p.company_id WHERE p.id IN (?)",
+        pids,
+    );
     people = {r["id"]: r for r in people_rows};
-    campaign_rows = await query_db(
-        f"SELECT id, name FROM campaigns WHERE id IN ({_in(cids)})", tuple(cids)
-    )
-        if cids
-        else [];
+    campaign_rows = await _rows_in("SELECT id, name FROM campaigns WHERE id IN (?)", cids);
     campaigns = {r["id"]: r["name"] for r in campaign_rows};
     company_ids = sorted({p["company_id"] for p in people.values() if p.get("company_id")});
     signals: dict[any, dict[str, str]] = {};
-    if company_ids {
-        rows = await query_db(
-            "SELECT o.company_id, o.signal_code, o.value_num, o.value_text, o.observed_at, o.run_id, "
-                "COALESCE(NULLIF(sc.label, ''), o.signal_code) AS label FROM observations o "
-                "LEFT JOIN signal_codes sc ON sc.code = o.signal_code "
-                f"WHERE o.company_id IN ({_in(company_ids)}) AND o.signal_code IN ({_in(OUTBOX_CONTEXT_SIGNALS)}) "
-                "ORDER BY o.observed_at, o.id",
-            (*company_ids, *OUTBOX_CONTEXT_SIGNALS),
-        );
-        latest: dict[tuple[any, ...], tuple[any, ...]] = {};
-        for r in rows {
-            value = _signal_value(r);
-            key = (r["company_id"], r["label"]);
-            seen = r["run_id"] or r["observed_at"];
-            (prev_seen, values) = latest.get(key, (None, []));
-            if seen != prev_seen {
-                values = [];
-            }
-            latest[key] = (seen, values if value in values else values + [value]);
+    latest: dict[tuple[any, ...], tuple[any, ...]] = {};
+    for r in await _rows_in(
+        "SELECT o.company_id, o.signal_code, o.value_num, o.value_text, o.observed_at, o.run_id, "
+            "COALESCE(NULLIF(sc.label, ''), o.signal_code) AS label FROM observations o "
+            "LEFT JOIN signal_codes sc ON sc.code = o.signal_code WHERE o.company_id IN (?) "
+            f"AND o.signal_code IN ({_in(OUTBOX_CONTEXT_SIGNALS)}) ORDER BY o.observed_at, o.id",
+        company_ids,
+        OUTBOX_CONTEXT_SIGNALS,
+    ) {
+        value = _signal_value(r);
+        key = (r["company_id"], r["label"]);
+        seen = r["run_id"] or r["observed_at"];
+        (prev_seen, values) = latest.get(key, (None, []));
+        if seen != prev_seen {
+            values = [];
         }
-        for ((company_id, label), (_, values)) in latest.items() {
-            signals.setdefault(company_id, {})[label] = _joined(values);
-        }
+        latest[key] = (seen, values if value in values else values + [value]);
+    }
+    for ((company_id, label), (_, values)) in latest.items() {
+        signals.setdefault(company_id, {})[label] = _joined(values);
     }
     for item in items {
         p = people.get(item.get("prospect_id")) or {};
-        item["context"] = {
-            "campaign": campaigns.get(item.get("campaign_id"), ""),
-            "company": p.get("company_name", ""),
-            "website": p.get("website") or (f"https://{p['domain']}" if p.get("domain") else ""),
-            "description": p.get("description", ""),
-            "found_by": p.get("found_by", ""),
-            "contact": _joined((p.get("first_name"), p.get("last_name")), " "),
-            "contact_title": p.get("title", ""),
-            "contact_source": p.get("source", ""),
-            "email_status": p.get("email_status", ""),
-            "score": p.get("score"),
-            "notes": p.get("personalization_notes", ""),
-            "signals": signals.get(p.get("company_id"), {}),
-        };
+        item["context"] = _context(p, campaigns.get(item.get("campaign_id"), ""), signals);
     }
     return items;
 }
 
+def _context(p: dict[any, any], campaign: str, signals: dict[any, dict[str, str]]) -> dict[str, any] {
+    return {
+        "campaign": campaign,
+        "company": p.get("company_name", ""),
+        "website": p.get("website") or (f"https://{p['domain']}" if p.get("domain") else ""),
+        "contact": _joined((p.get("first_name"), p.get("last_name")), " "),
+        "contact_title": p.get("title", ""),
+        "contact_source": p.get("source", ""),
+        "email_status": p.get("email_status", ""),
+        "score": p.get("score"),
+        "notes": p.get("personalization_notes", ""),
+        "signals": signals.get(p.get("company_id"), {}),
+    };
+}
+
 @app.get("/api/outbox")
+@_OR_ERROR
 async def get_outbox_api -> any {
-    try {
-        state = await _open_state();
-        await state.fail_stale_sending_outbox();
-        return {
-            **_compliance_view(),
-            "paused": await state.get_setting("sending_paused"),
-            "pending": await _with_context(
-                await state.get_outbox(status="pending_review", limit=100)
-            ),
-            "approved": await state.get_outbox(status="sending", limit=10)
-                + await state.get_outbox(status="approved", limit=50),
-            "sent": await query_db(
-                "SELECT * FROM outbox WHERE status = 'sent' ORDER BY sent_at DESC LIMIT 25"
-            ),
-            "failed": await query_db(
-                "SELECT * FROM outbox WHERE status IN ('failed','rejected','cancelled') ORDER BY updated_at DESC LIMIT 25",
-            ),
-        };
-    } except Exception as e {
-        return {"error": str(e)};
-    }
+    state = await _open_state();
+    await state.fail_stale_sending_outbox();
+    return {
+        **_compliance_view(),
+        "paused": await state.get_setting("sending_paused"),
+        "pending": await _with_context(await state.get_outbox(status="pending_review", limit=100)),
+        "approved": await state.get_outbox(status="sending", limit=10)
+            + await state.get_outbox(status="approved", limit=50),
+        "sent": await query_db(
+            "SELECT * FROM outbox WHERE status = 'sent' ORDER BY sent_at DESC LIMIT 25"
+        ),
+        "failed": await query_db(
+            "SELECT * FROM outbox WHERE status IN ('failed','rejected','cancelled') ORDER BY updated_at DESC LIMIT 25",
+        ),
+    };
 }
 
 @app.get("/api/sending-mode")
@@ -1190,29 +1179,22 @@ async def set_sending_mode(request: Request) -> any {
     await state.log_action(
         "sending_mode", "dashboard", {"mode": mode, "file": path.name, "requeued": requeued}
     );
-    return {"success": True, "mode": mode, "requeued": requeued}
-        if mode == "approval"
-        else {"success": True, "mode": mode};
+    out = {"success": True, "mode": mode};
+    return {**out, "requeued": requeued} if mode == "approval" else out;
 }
 
 @app.post("/api/outbox/approve-all")
+@_OR_500
 async def outbox_approve_all -> any {
-    try {
-        state = await _open_state();
-        n = await state.approve_outbox();
-        return {"success": True, "approved": n, "held": await state.count_held_for_review()};
-    } except Exception as e {
-        return _refuse(str(e), 500);
-    }
+    state = await _open_state();
+    n = await state.approve_outbox();
+    return {"success": True, "approved": n, "held": await state.count_held_for_review()};
 }
 
 @app.post("/api/outbox/{item_id}/approve")
+@_OR_500
 async def outbox_approve(item_id: str) -> any {
-    try {
-        return {"success": bool(await (await _open_state()).approve_outbox(item_id))};
-    } except Exception as e {
-        return _refuse(str(e), 500);
-    }
+    return {"success": bool(await (await _open_state()).approve_outbox(item_id))};
 }
 
 def _signed(text: str, kind: any) -> str {
@@ -1224,63 +1206,48 @@ def _signed(text: str, kind: any) -> str {
 }
 
 @app.post("/api/outbox/{item_id}/edit")
+@_OR_500
 async def outbox_edit(item_id: str, request: Request) -> any {
-    body = await _json(request, {});
-    if not isinstance(body, dict) {
-        body = {};
-    }
+    body = _dict(await _json(request, {}));
     subject = str(body.get("subject") or "").strip();
     text = str(body.get("body") or "").strip();
-    try {
-        state = await _open_state();
-        item = await state.get_outbox_item(item_id);
-        if not item or item.get("status") != "pending_review" {
-            return _refuse("Only drafts awaiting review can be edited.");
-        }
-        reply = item.get("kind") == "reply";
-        if reply {
-            subject = item.get("subject") or "";
-        }
-        if not subject.strip() or not text {
-            return _refuse("Subject and body are both required.", 400);
-        }
-        gate = pre_send_check("reviewer@example.com", subject, _signed(text, item.get("kind")));
-        prospect = await state.get_prospect(item.get("prospect_id") or "");
-        names = [
-            n
-            for n in (
-                getattr(prospect, "company", ""),
-                getattr(prospect, "first_name", ""),
-                getattr(prospect, "last_name", ""),
-            )
-            if n
-        ];
-        style = style_problems(
-            subject, text, shape=False, names=names, kind="reply" if reply else "cold"
-        );
-        if style {
-            return _refuse("The sender would hold this: the email " + "; ".join(style), 400);
-        }
-        if not gate {
-            return _refuse("The sender would have blocked this: " + "; ".join(gate.reasons), 400);
-        }
-        if not await state.edit_outbox_draft(item_id, subject, text) {
-            return _refuse("Only drafts awaiting review can be edited.");
-        }
-        await state.log_action(
-            "outbox_edited",
-            "dashboard",
-            {
-                "outbox_id": item_id,
-                "to_email": item.get("to_email", ""),
-                "old_subject": item.get("subject", ""),
-                "old_body": item.get("body", ""),
-            },
-        );
-        return {"success": True};
-    } except Exception as e {
-        return _refuse(str(e), 500);
+    state = await _open_state();
+    item = await state.get_outbox_item(item_id);
+    if not item or item.get("status") != "pending_review" {
+        return _refuse("Only drafts awaiting review can be edited.");
     }
+    reply = item.get("kind") == "reply";
+    if reply {
+        subject = item.get("subject") or "";
+    }
+    if not subject.strip() or not text {
+        return _refuse("Subject and body are both required.", 400);
+    }
+    gate = pre_send_check("reviewer@example.com", subject, _signed(text, item.get("kind")));
+    prospect = await state.get_prospect(item.get("prospect_id") or "");
+    names = [getattr(prospect, a, "") for a in ("company", "first_name", "last_name")];
+    kind = "reply" if reply else "cold";
+    style = style_problems(subject, text, shape=False, names=list(filter(None, names)), kind=kind);
+    if style {
+        return _refuse("The sender would hold this: the email " + "; ".join(style), 400);
+    }
+    if not gate {
+        return _refuse("The sender would have blocked this: " + "; ".join(gate.reasons), 400);
+    }
+    if not await state.edit_outbox_draft(item_id, subject, text) {
+        return _refuse("Only drafts awaiting review can be edited.");
+    }
+    await state.log_action(
+        "outbox_edited",
+        "dashboard",
+        {
+            "outbox_id": item_id,
+            "to_email": item.get("to_email", ""),
+            "old_subject": item.get("subject", ""),
+            "old_body": item.get("body", ""),
+        },
+    );
+    return {"success": True};
 }
 
 def _sellbird_can_send -> bool {
@@ -1335,13 +1302,10 @@ def _compliance_view -> dict[str, any] {
 }
 
 async def _instantly_ids -> list[any] {
-    out: list[any] = [];
-    for row in await query_db(
+    rows = await query_db(
         "SELECT prospect_ids_json FROM campaigns WHERE COALESCE(instantly_campaign_id, '') != ''"
-    ) {
-        out.append(_loads(row.get("prospect_ids_json") or "[]", None));
-    }
-    return out;
+    );
+    return [_loads(row.get("prospect_ids_json") or "[]", None) for row in rows];
 }
 
 async def _sellbird_committed_ids -> set[any] {
@@ -1389,111 +1353,98 @@ async def _sellbird_sent_to(prospect_id: str) -> bool {
 }
 
 @app.post("/api/prospects/{prospect_id}/sent")
+@_OR_500
 async def mark_prospect_sent(prospect_id: str, request: Request) -> any {
     try {
-        try {
-            body = await request.json();
-        } except ValueError {
-            body = {};
-        }
-        if body is None {
-            body = {};
-        }
-        if not isinstance(body, dict) or not isinstance(body.get("sent", True), bool) {
-            return _refuse('expected {"sent": true|false}', 400);
-        }
-        sent = body.get("sent", True);
-        rows = await query_db("SELECT status FROM prospects WHERE id = ?", (prospect_id,));
-        if not rows {
-            return _refuse("unknown prospect", 404);
-        }
-        current = rows[0].get("status") or "new";
-        state = await _open_state();
-        key = MANUAL_SEND_KEY + prospect_id;
-        marked = bool(await state.get_setting(key));
-        if sent {
-            if marked {
-                return {"success": True, "sent": True, "already": True};
-            }
-            if current not in HAND_SENDABLE_STATUSES {
-                return {"success": True, "sent": True, "status": current};
-            }
-            await state.set_setting(key, current);
-            if prospect_id in await _sellbird_committed_ids() {
-                await state.delete_setting(key);
-                return _refuse(
-                    "Sellbird has already approved or sent an email to this person. Check the Outbox.",
-                );
-            }
-            await state.update_prospect_status(prospect_id, "contacted");
-            changed = await state.cancel_pending_outbox_for_prospect(
-                prospect_id, reason=HAND_SENT_REASON
-            );
-        } else {
-            if not marked {
-                if current in HAND_SENDABLE_STATUSES {
-                    return {"success": True, "sent": False};
-                }
-                if current == "contacted" {
-                    return _refuse("This wasn't marked as sent by hand here, so it stays sent.");
-                }
-                return {"success": True, "sent": True, "status": current};
-            }
-            if current != "contacted" {
-                return {"success": True, "sent": True, "status": current};
-            }
-            previous = await state.get_setting(key) or "queued";
-            await state.update_prospect_status(
-                prospect_id, previous if previous in HAND_SENDABLE_STATUSES else "queued"
-            );
-            await state.delete_setting(key);
-            changed = await state.restore_hand_cancelled_outbox(
-                prospect_id, reason=HAND_SENT_REASON
-            );
-        }
-        if sent {
-            await state.remember_footer_lines(_compliance_view()["footer"].split("\n"));
-        }
-        await state.log_action(
-            action_type="manual_send" if sent else "manual_send_undone",
-            agent="user",
-            details={"prospect_id": prospect_id, "outbox_items": changed},
-        );
-        return {"success": True, "sent": sent};
-    } except Exception as e {
-        return _refuse(str(e), 500);
+        body = await request.json();
+    } except ValueError {
+        body = {};
     }
+    if body is None {
+        body = {};
+    }
+    if not isinstance(body, dict) or not isinstance(body.get("sent", True), bool) {
+        return _refuse('expected {"sent": true|false}', 400);
+    }
+    sent = body.get("sent", True);
+    rows = await query_db("SELECT status FROM prospects WHERE id = ?", (prospect_id,));
+    if not rows {
+        return _refuse("unknown prospect", 404);
+    }
+    current = rows[0].get("status") or "new";
+    state = await _open_state();
+    key = MANUAL_SEND_KEY + prospect_id;
+    marked = bool(await state.get_setting(key));
+    if sent {
+        if marked {
+            return {"success": True, "sent": True, "already": True};
+        }
+        if current not in HAND_SENDABLE_STATUSES {
+            return {"success": True, "sent": True, "status": current};
+        }
+        await state.set_setting(key, current);
+        if prospect_id in await _sellbird_committed_ids() {
+            await state.delete_setting(key);
+            return _refuse(
+                "Sellbird has already approved or sent an email to this person. Check the Outbox."
+            );
+        }
+        await state.update_prospect_status(prospect_id, "contacted");
+        changed = await state.cancel_pending_outbox_for_prospect(
+            prospect_id, reason=HAND_SENT_REASON
+        );
+    } else {
+        if not marked {
+            if current in HAND_SENDABLE_STATUSES {
+                return {"success": True, "sent": False};
+            }
+            if current == "contacted" {
+                return _refuse("This wasn't marked as sent by hand here, so it stays sent.");
+            }
+            return {"success": True, "sent": True, "status": current};
+        }
+        if current != "contacted" {
+            return {"success": True, "sent": True, "status": current};
+        }
+        previous = await state.get_setting(key) or "queued";
+        await state.update_prospect_status(
+            prospect_id, previous if previous in HAND_SENDABLE_STATUSES else "queued"
+        );
+        await state.delete_setting(key);
+        changed = await state.restore_hand_cancelled_outbox(prospect_id, reason=HAND_SENT_REASON);
+    }
+    if sent {
+        await state.remember_footer_lines(_compliance_view()["footer"].split("\n"));
+    }
+    await state.log_action(
+        action_type="manual_send" if sent else "manual_send_undone",
+        agent="user",
+        details={"prospect_id": prospect_id, "outbox_items": changed},
+    );
+    return {"success": True, "sent": sent};
 }
 
 @app.post("/api/outbox/{item_id}/reject")
+@_OR_500
 async def outbox_reject(item_id: str) -> any {
-    try {
-        if not await (await _open_state()).reject_outbox_item(item_id) {
-            return _refuse("That email is already sending or sent, so it can't be rejected.");
-        }
-        return {"success": True};
-    } except Exception as e {
-        return _refuse(str(e), 500);
+    if not await (await _open_state()).reject_outbox_item(item_id) {
+        return _refuse("That email is already sending or sent, so it can't be rejected.");
     }
+    return {"success": True};
 }
 
 @app.post("/api/sending/{action}")
+@_OR_500
 async def sending_toggle(action: str) -> any {
     if action not in ("pause", "resume") {
         return _refuse("unknown action", 400);
     }
-    try {
-        state = await _open_state();
-        await state.set_setting(
-            "sending_paused", "paused from dashboard" if action == "pause" else ""
-        );
-        if action == "resume" {
-            await state.set_setting("bounce_count", "0");
-        }
-        return {"success": True};
-    } except Exception as e {
-        return _refuse(str(e), 500);
+    state = await _open_state();
+    await state.set_setting("sending_paused", "paused from dashboard" if action == "pause" else "");
+    if action == "resume" {
+        await state.set_setting("bounce_count", "0");
     }
+    return {"success": True};
 }
 
 @app.get("/api/export/prospects.csv")
@@ -1528,13 +1479,11 @@ async def get_campaigns -> any {
         row["sequence"] = _loads(row.get("sequence_json", "[]"), []);
         row["prospect_ids"] = _loads(row.get("prospect_ids_json", "[]"), []);
         ids = row["prospect_ids"];
-        row["recipients"] = await query_db(
+        row["recipients"] = await _rows_in(
             "SELECT id, email, first_name, last_name, company, title, status, email_status, "
-                f"source, personalization_notes FROM prospects WHERE id IN ({','.join('?' * len(ids))}) AND email != ''",
-            tuple(ids),
-        )
-            if ids
-            else [];
+                "source, personalization_notes FROM prospects WHERE id IN (?) AND email != ''",
+            ids,
+        );
         row["send_as"] = send_as;
         row["footer"] = footer;
         for r in row["recipients"] {
@@ -1549,6 +1498,8 @@ async def get_campaigns -> any {
     }
     return rows;
 }
+
+glob _OPT_OUT_FIELDS = ("rule", "matched", "why", "message", "conversation_id");
 
 def _last_opt_out(history: list[any]) -> any {
     return next((h for h in reversed(history) if h["action"] == "opt_out"), None);
@@ -1571,20 +1522,13 @@ async def get_opt_out(prospect_id: str) -> any {
         "opted_out": status == "opted_out",
         "status": status,
         "recorded": bool(last),
-        "at": None,
+        "at": last["at"] if last else None,
         "rule": None,
-        "matched": "",
-        "why": "",
-        "message": "",
-        "conversation_id": "",
+        **dict.fromkeys(("matched", "why", "message", "conversation_id"), ""),
         "history": history,
     };
     if last {
-        out.update({
-            k: last.get(k) or out[k]
-            for k in ("rule", "matched", "why", "message", "conversation_id")
-        });
-        out["at"] = last["at"];
+        out.update({k: last.get(k) or out[k] for k in _OPT_OUT_FIELDS});
     } elif status == "opted_out" or history {
         for c in await query_db(
             "SELECT id, thread_json, updated_at FROM conversations WHERE prospect_id = ? ORDER BY updated_at DESC",
@@ -1644,11 +1588,7 @@ async def get_offers_accepted -> any {
             "SELECT value FROM settings WHERE key = ?",
             ("handoff:" + str(row.get("prospect_id") or ""),),
         );
-        try {
-            row["handoff"] = json.loads(done[0]["value"]) if done else None;
-        } except (TypeError, ValueError, KeyError) {
-            row["handoff"] = None;
-        }
+        row["handoff"] = _loads(done[0]["value"], None) if done else None;
     }
     return {"accepted": rows};
 }
@@ -1674,23 +1614,18 @@ async def get_conversations(`awaiting: bool = False) -> any {
     );
     pids = sorted({r["prospect_id"] for r in rows if r.get("prospect_id")});
     emails: dict[any, list[any]] = {};
-    if pids {
-        for e in await query_db(
-            "SELECT prospect_id, campaign_id, step, subject, body, sent_at FROM outbox "
-                f"WHERE kind = 'sequence' AND status = 'sent' AND prospect_id IN ({_in(pids)}) ORDER BY sent_at",
-            tuple(pids),
-        ) {
-            emails.setdefault(e.pop("prospect_id"), []).append(e);
-        }
+    for e in await _rows_in(
+        "SELECT prospect_id, campaign_id, step, subject, body, sent_at FROM outbox "
+            "WHERE kind = 'sequence' AND status = 'sent' AND prospect_id IN (?) ORDER BY sent_at",
+        pids,
+    ) {
+        emails.setdefault(e.pop("prospect_id"), []).append(e);
     }
-    cids = [r["id"] for r in rows];
-    draft_rows = await query_db(
-        "SELECT id, conversation_id, subject, body, send_at FROM outbox "
-            f"WHERE kind = 'reply' AND status = 'pending_review' AND conversation_id IN ({_in(cids)}) ORDER BY created_at",
-        tuple(cids),
-    )
-        if cids
-        else [];
+    draft_rows = await _rows_in(
+        "SELECT id, conversation_id, subject, body, send_at FROM outbox WHERE kind = 'reply' "
+            "AND status = 'pending_review' AND conversation_id IN (?) ORDER BY created_at",
+        [r["id"] for r in rows],
+    );
     drafts = {dr.pop("conversation_id"): dr for dr in draft_rows};
     for row in rows {
         row["thread"] = _loads(row.get("thread_json", "[]"), []);
@@ -1703,6 +1638,28 @@ async def get_conversations(`awaiting: bool = False) -> any {
         rows += await _awaiting_reply();
     }
     return rows;
+}
+
+def _picked(row: dict[any, any], keys: any) -> dict[any, any] {
+    return {k: row[k] for k in keys};
+}
+
+glob _PERSON_COLUMNS = "first_name last_name prospect_email company prospect_status".split();
+
+def _awaiting_row(pid: str, e: dict[any, any]) -> dict[any, any] {
+    return {
+        "id": "awaiting-" + pid,
+        "prospect_id": pid,
+        "campaign_id": "",
+        "channel": "email",
+        "intent": "",
+        "stage": "",
+        "status": "awaiting_reply",
+        "thread": [],
+        "draft": None,
+        "emails": [],
+        **{k: e.get(k) or "" for k in _PERSON_COLUMNS},
+    };
 }
 
 async def _awaiting_reply -> list[any] {
@@ -1720,32 +1677,11 @@ async def _awaiting_reply -> list[any] {
     );
     for e in reversed(sent) {
         pid = e["prospect_id"];
-        row = waiting.setdefault(
-            pid,
-            {
-                "id": "awaiting-" + pid,
-                "prospect_id": pid,
-                "campaign_id": "",
-                "channel": "email",
-                "intent": "",
-                "stage": "",
-                "status": "awaiting_reply",
-                "thread": [],
-                "draft": None,
-                "emails": [],
-                "first_name": e.get("first_name") or "",
-                "last_name": e.get("last_name") or "",
-                "prospect_email": e.get("prospect_email") or "",
-                "company": e.get("company") or "",
-                "prospect_status": e.get("prospect_status") or "",
-            },
-        );
-        row["emails"].append({
-            "step": e["step"],
-            "subject": e["subject"],
-            "body": e["body"],
-            "sent_at": e["sent_at"],
-        });
+        if pid not in waiting {
+            waiting[pid] = _awaiting_row(pid, e);
+        }
+        row = waiting[pid];
+        row["emails"].append(_picked(e, ("step", "subject", "body", "sent_at")));
         row["created_at"] = row.get("created_at") or e["sent_at"];
         row["updated_at"] = e["sent_at"];
     }
@@ -1821,14 +1757,10 @@ def _discovery_queries(body: dict[any, any], config: any) -> any {
     if problem {
         raise ValueError(problem);
     }
-    found = [c.strip() for c in (body.get("cities") or []) if c.strip()];
-    cities: list[str] | None = None;
-    if found {
-        cities = found;
-    }
+    cities = [c.strip() for c in (body.get("cities") or []) if c.strip()];
     return build_queries(
         config,
-        cities=cities,
+        cities=cities or None,
         depth=int(body.get("depth") or 30),
         limit=int(body.get("limit") or 100),
         preset=preset,
@@ -1884,96 +1816,90 @@ async def estimate_discovery(request: Request) -> any {
     }
 }
 
-async def _go_discover(state: any, config: any, provider: str, queries: any, max_spend: float) {
+async def _discover_report(
+    state: any, config: any, provider: str, queries: any, spend: float
+) -> any {
+    result = await run_prospecting(state, config, provider, queries, max_spend=spend);
+    return {
+        **(result.discover or {}),
+        "profiled_companies": result.profiled_companies,
+        "profile_observations": result.profile_observations,
+        "errors": result.errors,
+    };
+}
+
+async def _profile_report(state: any) -> any {
     try {
-        result = await run_prospecting(state, config, provider, queries, max_spend=max_spend);
-        _discovery_report = {
-            **(result.discover or {}),
-            "profiled_companies": result.profiled_companies,
-            "profile_observations": result.profile_observations,
-            "errors": result.errors,
-        };
+        config: any = load_config();
+    } except Exception {
+        config = None;
+    }
+    (companies, observations, _) = await run_profile_stage(state, limit=200, config=config);
+    return {"profiled_companies": companies, "profile_observations": observations};
+}
+
+async def _finish_run(name: str, work: any) {
+    try {
+        _discovery_report = await work;
     } except Exception as exc {
-        logger.exception("discovery run failed");
+        logger.exception(f"{name} run failed");
         _discovery_report = {"errors": [str(exc)], "stopped": "failed"};
     }
 }
 
-async def _go_profile(state: any) {
-    try {
-        try {
-            config: any = load_config();
-        } except Exception {
-            config = None;
-        }
-        (companies, observations, _) = await run_profile_stage(state, limit=200, config=config);
-        _discovery_report = {"profiled_companies": companies, "profile_observations": observations};
-    } except Exception as exc {
-        logger.exception("profile run failed");
-        _discovery_report = {"errors": [str(exc)], "stopped": "failed"};
-    }
+def _launch(kind: str, work: any) {
+    _discovery_kind = kind;
+    _discovery_report = None;
+    _discovery_task = asyncio.create_task(
+        _finish_run("discovery" if kind == "discover" else kind, work)
+    );
 }
 
 @app.post("/api/discover/run")
+@_OR_500
 async def start_discovery(request: Request) -> any {
     if _running() {
         return _refuse(_BUSY_RUN);
     }
-    try {
-        body = await request.json();
-        provider = body.get("provider") or "";
-        if provider not in PROVIDERS {
-            return _refuse(f"unknown provider {provider!r}", 400);
-        }
-        config = load_config();
-        try {
-            queries = _discovery_queries(body, config);
-        } except ValueError as e {
-            return _refuse(str(e), 400);
-        }
-        max_spend = float(body.get("max_spend") or 1.0);
-        state = await _open_state();
-        await state.set_setting("discovery_provider", provider);
-        await state.set_setting("discovery_paused", "");
-        _discovery_kind = "discover";
-        _discovery_report = None;
-        _discovery_task = asyncio.create_task(
-            _go_discover(state, config, provider, queries, max_spend)
-        );
-        return {"success": True, "queries": len(queries)};
-    } except Exception as e {
-        return _refuse(str(e), 500);
+    body = await request.json();
+    provider = body.get("provider") or "";
+    if provider not in PROVIDERS {
+        return _refuse(f"unknown provider {provider!r}", 400);
     }
+    config = load_config();
+    try {
+        queries = _discovery_queries(body, config);
+    } except ValueError as e {
+        return _refuse(str(e), 400);
+    }
+    max_spend = float(body.get("max_spend") or 1.0);
+    state = await _open_state();
+    await state.set_setting("discovery_provider", provider);
+    await state.set_setting("discovery_paused", "");
+    _launch("discover", _discover_report(state, config, provider, queries, max_spend));
+    return {"success": True, "queries": len(queries)};
 }
 
 @app.post("/api/profile/run")
+@_OR_500
 async def start_profile -> any {
     if _running() {
         return _refuse(_BUSY_RUN);
     }
-    try {
-        state = await _open_state();
-        pending = await state.count_companies_needing_profile();
-        if not pending {
-            return {"success": True, "pending": 0};
-        }
-        _discovery_kind = "profile";
-        _discovery_report = None;
-        _discovery_task = asyncio.create_task(_go_profile(state));
-        return {"success": True, "pending": pending};
-    } except Exception as e {
-        return _refuse(str(e), 500);
+    state = await _open_state();
+    pending = await state.count_companies_needing_profile();
+    if not pending {
+        return {"success": True, "pending": 0};
     }
+    _launch("profile", _profile_report(state));
+    return {"success": True, "pending": pending};
 }
 
 @app.post("/api/discover/stop")
+@_OR_500
 async def stop_discovery -> any {
-    try {
-        await (await _open_state()).set_setting("discovery_paused", "stopped from dashboard");
-        return {"success": True};
-    } except Exception as e {
-        return _refuse(str(e), 500);
-    }
+    await (await _open_state()).set_setting("discovery_paused", "stopped from dashboard");
+    return {"success": True};
 }
 
 def _parse_ts(value: any) -> datetime | None {
@@ -2012,15 +1938,10 @@ def _eta_text(minutes: any) -> str {
 def _step(
     label: str, done: int, total: int, active: bool, detail: str, info: bool = False
 ) -> dict[str, any] {
-    if active {
-        state = "running";
-    } elif info {
-        state = "done" if done else "waiting";
-    } elif total and done >= total {
-        state = "done";
-    } else {
-        state = "partial" if done else "waiting";
-    }
+    complete = bool(done) if info else bool(total and done >= total);
+    state = "running"
+        if active
+        else "done" if complete else "partial" if done and not info else "waiting";
     return {"label": label, "done": done, "total": total, "state": state, "detail": detail};
 }
 
@@ -2052,27 +1973,14 @@ async def get_live_status -> any {
     companies = await _scalar("SELECT COUNT(*) FROM companies");
     with_site = await _scalar(f"SELECT COUNT(*) FROM companies WHERE {has_site}");
     no_site = companies - with_site;
-    profiled = await _scalar(
-        f"SELECT COUNT(*) FROM companies WHERE {has_site} AND profile_checked_at IS NOT NULL"
-    );
-    checked = await _scalar(
-        f"SELECT COUNT(*) FROM companies WHERE {has_site} AND profile_checked_at IS NOT NULL AND prospects_checked_at IS NOT NULL",
-    );
+    read = f"SELECT COUNT(*) FROM companies WHERE {has_site} AND profile_checked_at IS NOT NULL";
+    profiled = await _scalar(read);
+    checked = await _scalar(read + " AND prospects_checked_at IS NOT NULL");
     prospects = await query_db("SELECT id, email, email_status, status FROM prospects");
     with_email = [p for p in prospects if p.get("email")];
-    by_status: dict[str, int] = {};
-    for p in with_email {
-        k = (p.get("email_status") or "guess").lower();
-        by_status[k] = by_status.get(k, 0) + 1;
-    }
-    deliverable = {
-        p["id"]
-        for p in with_email
-        if (p.get("email_status") or "") in ("verified", "risky")
-    };
-    unconfirmed = sum(
-        n for (k, n) in by_status.items() if k not in ("verified", "risky", "invalid")
-    );
+    by_status = Counter([(p.get("email_status") or "guess").lower() for p in with_email]);
+    deliverable = {p["id"] for p in with_email if p.get("email_status") in ("verified", "risky")};
+    unconfirmed = len(with_email) - by_status["verified"] - by_status["risky"] - by_status["invalid"];
     drafted = _drafted_ids(await query_db("SELECT prospect_ids_json FROM campaigns"));
     sent = {p["id"] for p in prospects if p.get("status") in SENT_STATUSES};
     sellbird_sends = _sellbird_can_send();
@@ -2119,9 +2027,7 @@ async def get_live_status -> any {
         running.append(item);
     }
     last_contact = _parse_ts(await _first("SELECT MAX(prospects_checked_at) AS t FROM companies"));
-    finding_emails = bool(
-        last_contact and (now - last_contact).total_seconds() < CONTACT_ACTIVE_SECONDS
-    );
+    finding_emails = bool(last_contact and (now - last_contact).total_seconds() < CONTACT_ACTIVE_SECONDS);
     stages = [r["stage"] for r in running];
     (reading, finding) = ("profile" in stages, "discover" in stages);
     profile_eta = next((r["eta_min"] for r in running if r["stage"] == "profile"), None);
@@ -2132,23 +2038,18 @@ async def get_live_status -> any {
     if no_site {
         read_detail += f" · {no_site} have no website (skipped)";
     }
-    bad = f" · {by_status['invalid']} bad" if by_status.get("invalid") else "";
+    bad = f" · {by_status['invalid']} bad" if by_status["invalid"] else "";
     (n_mail, n_draft, n_sent) = (len(with_email), len(drafted), len(sent & drafted));
     found_detail = f"{checked} of {profiled} checked · {n_mail} emails found";
     real_detail = f"{by_status.get('verified', 0)} verified · {by_status.get('risky', 0)} risky · {unconfirmed} not confirmed{bad}";
     reply_detail = f"{replies} replies" if replies else "No replies yet";
+    to_write = len(deliverable | drafted);
     steps = [
         _step("Find businesses", companies, 0, finding, f"{companies} businesses found", info=True),
         _step("Read their websites", profiled, with_site, reading, read_detail),
         _step("Find emails", checked, profiled, finding_emails, found_detail),
         _step("Check emails are real", n_mail - unconfirmed, n_mail, False, real_detail),
-        _step(
-            "Write first emails",
-            n_draft,
-            len(deliverable | drafted),
-            False,
-            f"{n_draft} written · see Campaigns",
-        ),
+        _step("Write first emails", n_draft, to_write, False, f"{n_draft} written · see Campaigns"),
         _step("Sent", n_sent, n_draft, False, f"{n_sent} of {n_draft} sent"),
         _step("Replies", replies, 0, False, reply_detail, info=True),
     ];
@@ -2241,12 +2142,8 @@ async def get_today -> any {
         approved = await state.get_outbox(status="approved", limit=200);
         paused = await state.get_setting("sending_paused");
         counts = await state.count_prospects_by_status();
-        open_convos = await _scalar(
-            "SELECT COUNT(*) AS n FROM conversations WHERE status = 'open'"
-        );
-        needs_human = await _scalar(
-            "SELECT COUNT(*) AS n FROM conversations WHERE status = 'needs_human'"
-        );
+        convos = await _count_map("conversations");
+        (open_convos, needs_human) = (convos.get("open", 0), convos.get("needs_human", 0));
         n_companies = await _scalar("SELECT COUNT(*) AS n FROM companies");
         unprofiled = await state.count_companies_needing_profile();
         stats = {
@@ -2264,13 +2161,8 @@ async def get_today -> any {
         brain = await _brain_status();
         if brain.get("status") == "paused" {
             who = "Codex" if brain.get("provider") == "codex" else "Sellbird's model";
-            items.append(
-                _today(
-                    "brain-paused",
-                    who=who,
-                    reason=str(brain.get("reason") or "It can't be used right now.")[:300],
-                ),
-            );
+            reason = str(brain.get("reason") or "It can't be used right now.")[:300];
+            items.append(_today("brain-paused", who=who, reason=reason));
         }
         rules_problem = await state.get_setting(EMAIL_RULES_PROBLEM_KEY);
         if rules_problem {
@@ -2292,12 +2184,7 @@ async def get_today -> any {
         precleared_hold = await current_hold(state, loaded);
         if precleared_hold {
             message = hold_message(precleared_hold);
-            item = _today(
-                "precleared-hold",
-                tone=message["tone"],
-                title=message["title"],
-                detail=message["detail"],
-            );
+            item = _today("precleared-hold", **message);
             items.append({**item, "url": message["url"], "url_label": message["url_label"]});
         }
         setup = await get_setup_status();
@@ -2307,11 +2194,8 @@ async def get_today -> any {
                 for c in setup.get("checks", [])
                 if c.get("required") and not c.get("done")
             ];
-            items.append(
-                _today(
-                    "setup", detail=", ".join(missing[:3]) or "Some required steps are incomplete."
-                ),
-            );
+            detail = ", ".join(missing[:3]) or "Some required steps are incomplete.";
+            items.append(_today("setup", detail=detail));
         }
         if proposed {
             items.append(_today("signals", title=_plural(len(proposed), "signal", "signals")));
@@ -2325,31 +2209,21 @@ async def get_today -> any {
             items.append(_today("profile", n=unprofiled));
         }
         if needs_human {
-            items.append(
-                _today(
-                    "needs-human",
-                    title=_plural(needs_human, "conversation needs you", "conversations need you"),
-                ),
-            );
+            title = _plural(needs_human, "conversation needs you", "conversations need you");
+            items.append(_today("needs-human", title=title));
         }
         if pending {
             detail = "Nothing sends until you approve it."
                 if _require_approval_now()
                 else "Autopilot sends the rest on its own; these wait for you.";
+            title = _plural(len(pending), "email", "emails");
             items.append(
-                _today(
-                    "outbox",
-                    title=_plural(len(pending), "email", "emails"),
-                    detail=detail + " Read them one at a time.",
-                ),
+                _today("outbox", title=title, detail=detail + " Read them one at a time.")
             );
         }
         if open_convos {
-            items.append(
-                _today(
-                    "replies", title=_plural(open_convos, "live conversation", "live conversations")
-                ),
-            );
+            title = _plural(open_convos, "live conversation", "live conversations");
+            items.append(_today("replies", title=title));
         }
         return {"items": items, "stats": stats};
     } except Exception as e {
@@ -2375,18 +2249,15 @@ glob _CATEGORIES = {
      _COHORT_COLUMNS = ("name", "domain", "website", "industry", "location");
 
 def _signal_rows(codes: list[any], cat: str, counts: dict[any, any]) -> list[any] {
-    rows: list[any] = [];
-    for sig in codes {
-        if sig.get("category") == cat {
-            seen = counts.get(sig["code"], {});
-            rows.append({
-                **sig,
-                "companies": seen.get("companies", 0),
-                "observations": seen.get("observations", 0),
-            });
-        }
-    }
-    return rows;
+    return [
+        {**sig, **_seen(counts.get(sig["code"], {}))}
+        for sig in codes
+        if sig.get("category") == cat
+    ];
+}
+
+def _seen(found: dict[any, any]) -> dict[str, any] {
+    return {"companies": found.get("companies", 0), "observations": found.get("observations", 0)};
 }
 
 @app.get("/api/signals")
@@ -2397,23 +2268,14 @@ async def get_signals -> any {
         codes = await state.get_signal_codes();
         counts = {c["signal_code"]: c for c in await state.signal_counts()};
         groups: list[any] = [];
-        summary: dict[str, int] = {"proposed": 0, "confirmed": 0, "rejected": 0};
         for cat in CATEGORY_ORDER {
             rows = _signal_rows(codes, cat, counts);
             if rows {
-                meta = CATEGORY_META.get(cat, {});
-                groups.append({
-                    "key": cat,
-                    "label": meta.get("label", cat.title()),
-                    "blurb": meta.get("blurb", ""),
-                    "signals": rows,
-                });
+                groups.append({"key": cat, **CATEGORY_META[cat], "signals": rows});
             }
         }
-        for sig in codes {
-            status = sig.get("status", "proposed");
-            summary[status] = summary.get(status, 0) + 1;
-        }
+        summary: dict[any, any] = {"proposed": 0, "confirmed": 0, "rejected": 0};
+        summary.update(dict(Counter([sig.get("status", "proposed") for sig in codes])));
         return {"summary": summary, "groups": groups, "total": len(codes)};
     } except Exception as e {
         logger.exception("signals load failed");
@@ -2422,39 +2284,35 @@ async def get_signals -> any {
 }
 
 @app.post("/api/signals/status")
+@_OR_500
 async def set_signals_status(request: Request) -> any {
-    try {
-        body = await request.json();
-        status = (body.get("status") or "").strip();
-        codes = body.get("codes") or ([body["code"]] if body.get("code") else []);
-        if status not in ("proposed", "confirmed", "rejected") {
-            return _refuse(f"invalid status: {status!r}", 400);
-        }
-        if not codes {
-            return _refuse("no signal codes given", 400);
-        }
-        state = await _open_state();
-        await seed_signal_catalog(state);
-        (changed, unknown) = (0, []);
-        for code in codes {
-            if await state.set_signal_status(code, status) {
-                changed += 1;
-            } else {
-                unknown.append(code);
-            }
-        }
-        return {"success": True, "changed": changed, "status": status, "unknown": unknown};
-    } except Exception as e {
-        return _refuse(str(e), 500);
+    body = await request.json();
+    status = (body.get("status") or "").strip();
+    codes = body.get("codes") or ([body["code"]] if body.get("code") else []);
+    if status not in ("proposed", "confirmed", "rejected") {
+        return _refuse(f"invalid status: {status!r}", 400);
     }
+    if not codes {
+        return _refuse("no signal codes given", 400);
+    }
+    state = await _open_state();
+    await seed_signal_catalog(state);
+    unknown: list[any] = [];
+    for code in codes {
+        if not await state.set_signal_status(code, status) {
+            unknown.append(code);
+        }
+    }
+    return {
+        "success": True,
+        "changed": len(codes) - len(unknown),
+        "status": status,
+        "unknown": unknown,
+    };
 }
 
 async def _cohort_companies(
-    require: list[str],
-    exclude: list[str],
-    offset: int = 0,
-    limit: int | None = None,
-    ranges: list[any] | None = None,
+    require: list[str], exclude: list[str], offset: int = 0, limit: any = None, ranges: any = None
 ) -> any {
     return await (await _open_state()).cohort_companies(
         require, exclude, offset, limit, ranges=ranges
@@ -2493,17 +2351,11 @@ def _range_bound(raw: any) -> float | None {
 }
 
 def _range_items(raw: str) -> list[any] {
-    items: list[any] = [];
-    for part in raw.split(",") {
-        if part.strip() {
-            pieces = part.split(":");
-            if len(pieces) != 3 {
-                raise ValueError("ranges look like CODE:min:max");
-            }
-            items.append({"code": pieces[0], "min": pieces[1], "max": pieces[2]});
-        }
+    pieces = [part.split(":") for part in raw.split(",") if part.strip()];
+    if any(len(p) != 3 for p in pieces) {
+        raise ValueError("ranges look like CODE:min:max");
     }
-    return items;
+    return [{"code": code, "min": low, "max": high} for (code, low, high) in pieces];
 }
 
 def _ranges(raw: any) -> list[any] {
@@ -2568,7 +2420,7 @@ async def preview_cohort(request: Request) -> any {
         if not require and not ranges {
             return {"size": 0, "offset": 0, "limit": limit, "companies": []};
         }
-        (size, rows) = await _cohort_companies(require, exclude, offset, limit, ranges=ranges);
+        (size, rows) = await _cohort_companies(require, exclude, offset, limit, ranges);
         return {"size": size, "offset": offset, "limit": limit, "companies": rows};
     } except (ValueError, TypeError) as e {
         return _error(str(e), 400);
@@ -2608,21 +2460,18 @@ async def export_cohort(require: str = "", exclude: str = "", ranges: str = "") 
 }
 
 @app.get("/api/runs")
+@_OR_ERROR
 async def get_runs_api -> any {
-    try {
-        state = await _open_state();
-        await state.sweep_stale_runs();
-        runs = await state.get_runs(limit=25);
-        now = datetime.now(timezone.utc).replace(tzinfo=None);
-        for run in runs {
-            if run.get("status") == "running" and await _stalled(run, now) {
-                run["status"] = "stalled";
-            }
+    state = await _open_state();
+    await state.sweep_stale_runs();
+    runs = await state.get_runs(limit=25);
+    now = datetime.now(timezone.utc).replace(tzinfo=None);
+    for run in runs {
+        if run.get("status") == "running" and await _stalled(run, now) {
+            run["status"] = "stalled";
         }
-        return runs;
-    } except Exception as e {
-        return {"error": str(e)};
     }
+    return runs;
 }
 
 glob WEB_DIR = Path(__file__).resolve().parent / "web",
