@@ -71,6 +71,17 @@ glob logger = logging.getLogger("sellbird.setup"),
      _GEOGRAPHY = "Target geography (for a city, include the state/country, e.g. 'Solon, Ohio' — an unqualified city name can silently geocode to the wrong place)",
      _MAIN_OFFER = "What's your main offer? (e.g., 'SaaS subscription at $99/mo', 'Marketing retainer')",
      _ENTRY_OFFER = "Any low-commitment entry offer? (e.g., 'Free trial', 'Free audit', 'Sample report')",
+     _NORWAY = "NO is Norway's code. Are your prospects all in Norway?",
+     _KEY_PRIVACY = "\n  Precleared receives the address to make the key\n  (privacy: https://precleared.dev/privacy).",
+     _PROVIDERS = "    claude — your Claude plan, via Claude Code (default)\n    codex  — your ChatGPT plan, via the Codex CLI",
+     _SUGGESTED = "    {} is the Codex model Sellbird has verified as text-only\n    (no code-execution tools). Press Enter to use it, or type another.",
+     _CLAUDE_DOWNLOAD = "         https://claude.ai/download\n\n         After installing, run 'claude login' to authenticate,\n         then re-run this setup.",
+     _CODEX_LOGIN = "         {}\n\n         Then run 'codex login', choose 'Sign in with ChatGPT',\n         and re-run this setup.",
+     _OFFER_INTRO = "Now let's talk about your offer — what happens when someone's interested?\n",
+     _GOAL_MENU = "\n  What's the goal when someone shows interest?\n    1. Book a call\n    2. Start a free trial\n    3. Just get a reply / start a conversation",
+     _TIMES_MENU = "\n  How should Sellbird suggest meeting times?\n    1. Suggest specific times ('How about Thursday at 2pm?')\n    2. Ask for their preference ('What does your calendar look like?')",
+     _MEETING_OWNER = "Who takes the meeting? (your name or role)",
+     _TOO_MANY_SENDS = "\n  ⚠  200+ sends/day from a fresh domain will torch your\n     deliverability. Warm up gradually (see docs/deliverability.md).",
      _GOALS = {"1": "book_call", "2": "start_trial", "3": "get_reply"},
      _PACKAGES = ["httpx", "aiosqlite", "yaml", "pydantic", "bs4"],
      _MODEL_RETRY = "    (that doesn't look like a model name — try again or leave blank)",
@@ -170,16 +181,15 @@ def _saved_timezone -> str {
     return str(_saved("usage", "quiet_hours", "timezone") or "").strip();
 }
 
+def _section(parent: any, key: str) -> any {
+    if not isinstance(parent.get(key), dict) {
+        parent[key] = {};
+    }
+    return parent[key];
+}
+
 def _save_precleared(config: any, answers: any) {
-    compliance = config.get("compliance");
-    if not isinstance(compliance, dict) {
-        compliance = config["compliance"] = {};
-    }
-    section = compliance.get("precleared");
-    if not isinstance(section, dict) {
-        section = compliance["precleared"] = {};
-    }
-    section.update(answers);
+    _section(_section(config, "compliance"), "precleared").update(answers);
 }
 
 def _merge_answers(existing: any, answers: any) {
@@ -212,17 +222,14 @@ def _check_codex_cli -> bool {
 }
 
 async def _test_claude(brain: any) -> bool {
-    return "SELLBIRD_READY"
-        in await brain.think(
-            "Respond with exactly: SELLBIRD_READY", session_id="sellbird-setup-test"
-        );
+    ready = "SELLBIRD_READY";
+    return ready
+        in await brain.think(f"Respond with exactly: {ready}", session_id="sellbird-setup-test");
 }
 
 def _ask_brain_config -> BrainConfig {
     _print_sellbird("I think with an AI subscription you already pay for:");
-    print(
-        "    claude — your Claude plan, via Claude Code (default)\n    codex  — your ChatGPT plan, via the Codex CLI",
-    );
+    print(_PROVIDERS);
     while True {
         provider = _ask("Which one? (claude/codex)", default="claude").lower();
         if provider == "codex" {
@@ -239,24 +246,30 @@ def _ask_brain_config -> BrainConfig {
         }
         print("    (type claude or codex)");
     }
-    suggested = "";
+    (prompt, suggested) = ("Model (leave blank for the default)", "");
     if provider == "codex" {
-        suggested = importlib.import_module("sellbird.codex").SUGGESTED_MODEL;
-        print(
-            f"    {suggested} is the Codex model Sellbird has verified as text-only\n    (no code-execution tools). Press Enter to use it, or type another.",
-        );
+        (prompt, suggested) = ("Model", importlib.import_module("sellbird.codex").SUGGESTED_MODEL);
+        print(_SUGGESTED.format(suggested));
     }
     while True {
-        if provider == "codex" {
-            model = _ask("Model", default=suggested, required=False);
-        } else {
-            model = _ask("Model (leave blank for the default)", required=False);
-        }
         try {
+            model = _ask(prompt, default=suggested, required=False);
             return BrainConfig(provider=provider, model=model);
         } except ValidationError {
             print(_MODEL_RETRY);
         }
+    }
+}
+
+def _codex_check(label: str, check: any, failed: str) -> any {
+    codex = importlib.import_module("sellbird.codex");
+    print(label, end=" ");
+    try {
+        return check();
+    } except codex.CodexError as e {
+        print(f"✗ {failed}");
+        _print_sellbird(str(e));
+        raise SystemExit(1);
     }
 }
 
@@ -278,6 +291,10 @@ def _split(answer: str) -> list[str] {
     return [part.strip() for part in answer.split(",") if part.strip()];
 }
 
+def _at_least_one(value: str) -> int {
+    return max(1, int(value));
+}
+
 def _ask_number(prompt: str, fallback: str, parse: any) -> any {
     answer = _ask(prompt, default=fallback);
     try {
@@ -288,30 +305,13 @@ def _ask_number(prompt: str, fallback: str, parse: any) -> any {
     }
 }
 
-def _percent(value: str) -> float {
-    return min(100.0, max(1.0, float(value)));
-}
-
-def _at_least_one(value: str) -> int {
-    return max(1, int(value));
-}
-
-class SetupWizard {
+obj SetupWizard {
     has env_vars: dict[str, str] = {},
-        config: any = None,
-        brain_config: any = None,
+        config: any = {},
+        brain_config: any = BrainConfig(),
         precleared: any = None,
         config_saved: bool = False,
         manual_product: bool = False;
-
-    def init {
-        self.env_vars = {};
-        self.config = {};
-        self.brain_config = BrainConfig();
-        self.precleared = None;
-        self.config_saved = False;
-        self.manual_product = False;
-    }
 
     async def run {
         print(_BANNER);
@@ -370,9 +370,7 @@ class SetupWizard {
         if not _check_claude_cli() {
             print("✗ Not found");
             _print_sellbird("I need Claude Code CLI to think. Install it from:");
-            print(
-                "         https://claude.ai/download\n\n         After installing, run 'claude login' to authenticate,\n         then re-run this setup.",
-            );
+            print(_CLAUDE_DOWNLOAD);
             raise SystemExit(1);
         }
         print("✓ Found");
@@ -390,29 +388,16 @@ class SetupWizard {
         if not _check_codex_cli() {
             print("✗ Not found");
             _print_sellbird("I need the Codex CLI to think with your ChatGPT plan:");
-            print(
-                f"         {codex.CODEX_INSTALL_HINT}\n\n         Then run 'codex login', choose 'Sign in with ChatGPT',\n         and re-run this setup.",
-            );
+            print(_CODEX_LOGIN.format(codex.CODEX_INSTALL_HINT));
             raise SystemExit(1);
         }
         print("✓ Found");
-        print("  Checking Codex CLI version...", end=" ");
-        try {
-            print(f"✓ {codex.check_cli_version()}");
-        } except codex.CodexError as e {
-            print("✗ Not supported");
-            _print_sellbird(str(e));
-            raise SystemExit(1);
-        }
-        print("  Checking Codex ChatGPT login...", end=" ");
-        try {
-            codex.check_native_auth();
-            print("✓ Found");
-        } except codex.CodexError as e {
-            print("✗ Not ready");
-            _print_sellbird(str(e));
-            raise SystemExit(1);
-        }
+        version = _codex_check(
+            "  Checking Codex CLI version...", codex.check_cli_version, "Not supported"
+        );
+        print(f"✓ {version}");
+        _codex_check("  Checking Codex ChatGPT login...", codex.check_native_auth, "Not ready");
+        print("✓ Found");
         await self._test_brain(
             "  Testing Codex (isolated, no tools)...",
             """Codex is installed but the test call failed. The log
@@ -482,8 +467,7 @@ class SetupWizard {
         } else {
             _say("""That's fine. I can still find prospects via Google
     and company websites. You can add LinkedIn later.""");
-            self.env_vars["LINKEDIN_EMAIL"] = "";
-            self.env_vars["LINKEDIN_PASSWORD"] = "";
+            self.env_vars.update(LINKEDIN_EMAIL="", LINKEDIN_PASSWORD="");
         }
     }
 
@@ -499,8 +483,7 @@ class SetupWizard {
         } else {
             _say("""No problem. I'll use my built-in crawler instead. It works
     great for most sites — just can't render JavaScript.""");
-            self.env_vars["CLOUDFLARE_ACCOUNT_ID"] = "";
-            self.env_vars["CLOUDFLARE_API_TOKEN"] = "";
+            self.env_vars.update(CLOUDFLARE_ACCOUNT_ID="", CLOUDFLARE_API_TOKEN="");
         }
     }
 
@@ -515,9 +498,8 @@ class SetupWizard {
             url = _ask("Your product's website URL (e.g. https://yourcompany.com)");
             _say(f"""Give me a minute — I'm going to crawl {url}
     and learn everything I can about your product.\n""");
-            trainer = importlib.import_module("sellbird.trainer").Trainer(
-                brain_config=self.brain_config
-            );
+            Trainer = importlib.import_module("sellbird.trainer").Trainer;
+            trainer = Trainer(brain_config=self.brain_config);
             self.config = await trainer.train(url, str(_config_file())) or {};
             if self.config {
                 _say("""Training complete! I've got a solid understanding
@@ -548,35 +530,23 @@ class SetupWizard {
         titles = _split(_ask("Decision-maker titles (comma-separated)"));
         company_size = _ask("Target company size", default="10-200 employees");
         geography = _split(_ask(_GEOGRAPHY, default="United States"));
-        _print_sellbird(
-            "Now let's talk about your offer — what happens when someone's interested?\n"
-        );
-        primary_offer = _ask(_MAIN_OFFER, required=False);
-        entry_offer = _ask(_ENTRY_OFFER, default="", required=False);
-        print(
-            "\n  What's the goal when someone shows interest?\n    1. Book a call\n    2. Start a free trial\n    3. Just get a reply / start a conversation",
-        );
-        goal = _GOALS.get(_ask("Goal (1/2/3)", default="1"), "book_call");
-        (booking_method, booking_url, meeting_duration, meeting_owner) = (
-            "suggest_times",
-            "",
-            "15 minutes",
-            "",
-        );
-        if goal == "book_call" {
+        _print_sellbird(_OFFER_INTRO);
+        offer: dict[str, any] = {"primary": _ask(_MAIN_OFFER, required=False)};
+        offer["entry"] = _ask(_ENTRY_OFFER, default="", required=False);
+        print(_GOAL_MENU);
+        offer["goal"] = _GOALS.get(_ask("Goal (1/2/3)", default="1"), "book_call");
+        offer["booking_method"] = "suggest_times";
+        offer.update(booking_url="", meeting_duration="15 minutes", meeting_owner="");
+        if offer["goal"] == "book_call" {
             if _ask_yes_no("Do you have a calendar booking link (Calendly, Cal.com, etc.)?") {
-                booking_url = _ask("Booking URL");
-                booking_method = "calendar_link";
+                offer.update(booking_method="calendar_link", booking_url=_ask("Booking URL"));
             } else {
-                print(
-                    "\n  How should Sellbird suggest meeting times?\n    1. Suggest specific times ('How about Thursday at 2pm?')\n    2. Ask for their preference ('What does your calendar look like?')",
-                );
-                booking_method = "suggest_times"
-                    if _ask("Method (1/2)", default="1") == "1"
-                    else "ask_preference";
+                print(_TIMES_MENU);
+                method = _ask("Method (1/2)", default="1");
+                offer["booking_method"] = "suggest_times" if method == "1" else "ask_preference";
             }
-            meeting_duration = _ask("How long is the call?", default="15 minutes");
-            meeting_owner = _ask("Who takes the meeting? (your name or role)", required=False);
+            offer["meeting_duration"] = _ask("How long is the call?", default="15 minutes");
+            offer["meeting_owner"] = _ask(_MEETING_OWNER, required=False);
         }
         _print_sellbird("What persona should I use for outreach?\n");
         persona_name = _ask("My name (what prospects see)", default="Alex");
@@ -597,15 +567,7 @@ class SetupWizard {
                 "pricing": pricing,
                 "key_benefits": benefits or ["Benefit 1"],
                 "objection_responses": {},
-                "offer": {
-                    "primary": primary_offer or "",
-                    "entry": entry_offer or "",
-                    "goal": goal,
-                    "booking_method": booking_method,
-                    "booking_url": booking_url,
-                    "meeting_duration": meeting_duration,
-                    "meeting_owner": meeting_owner or "",
-                },
+                "offer": offer,
             },
             "icp": {
                 "industries": industries or ["Technology"],
@@ -632,7 +594,8 @@ class SetupWizard {
     def _setup_behavior {
         _print_sellbird("Last thing — a few settings for how I operate.\n");
         print("  I track my own Claude usage so I don't eat your whole daily quota.");
-        usage_pct = _ask_number("Max % of daily Claude usage I can consume", "80", _percent);
+        percent = lambda (v: str) -> float { min(100.0, max(1.0, float(v))) };
+        usage_pct = _ask_number("Max % of daily Claude usage I can consume", "80", percent);
         print("\n  I wake up on a schedule to check for work.");
         interval = _ask_number("How often should I check for work (minutes)?", "15", _at_least_one);
         print("\n  I won't send emails or do outreach during quiet hours.");
@@ -641,9 +604,7 @@ class SetupWizard {
         timezone = _ask("Your timezone", default="America/New_York");
         daily_sends = _ask_number("Max emails to send per day", "50", _at_least_one);
         if daily_sends > 200 {
-            print(
-                "\n  ⚠  200+ sends/day from a fresh domain will torch your\n     deliverability. Warm up gradually (see docs/deliverability.md).",
-            );
+            print(_TOO_MANY_SENDS);
         }
         if self.config {
             self.config["usage"] = {
@@ -693,15 +654,10 @@ class SetupWizard {
             or ("GB" if uk_sender else "");
         codes = ", ".join(SENDER_COUNTRIES);
         ending = ")" if default_country else "; blank to skip)";
+        where = f"Where is your business based? (two-letter code, e.g. GB or US{ending}";
         while True {
-            country = _sender_country(
-                _ask(
-                    f"Where is your business based? (two-letter code, e.g. GB or US{ending}",
-                    default=default_country,
-                    required=False,
-                ),
-                strict=False,
-            );
+            answer = _ask(where, default=default_country, required=False);
+            country = _sender_country(answer, strict=False);
             if country in SENDER_COUNTRIES {
                 break;
             }
@@ -720,20 +676,10 @@ class SetupWizard {
         }
         hint = "type none if not" if saved_prospects else "blank if not";
         while True {
-            answer = _ask(
-                f"Your prospects' country, if they're all in one (e.g. US; {hint})",
-                default=saved_prospects,
-                required=False,
-            );
+            question = f"Your prospects' country, if they're all in one (e.g. US; {hint})";
+            answer = _ask(question, default=saved_prospects, required=False);
             word = answer.strip().lower();
-            if word == "none"
-                or (
-                    word == "no"
-                    and not _ask_yes_no(
-                        "NO is Norway's code. Are your prospects all in Norway?", default=False
-                    )
-                )
-            {
+            if word == "none" or (word == "no" and not _ask_yes_no(_NORWAY, default=False)) {
                 prospects = "";
                 break;
             }
@@ -783,9 +729,7 @@ class SetupWizard {
         if not _ask_yes_no("Get a free Precleared key now? It only needs your email address") {
             return "";
         }
-        print(
-            "\n  Precleared receives the address to make the key\n  (privacy: https://precleared.dev/privacy).",
-        );
+        print(_KEY_PRIVACY);
         country = (self.precleared or {}).get("sender_country", "");
         while True {
             email = _ask("Email address for the key (Enter to skip)", required=False);
@@ -825,9 +769,8 @@ class SetupWizard {
         if not self.config {
             return;
         }
-        self.config["brain"] = importlib.import_module("sellbird.trainer").brain_section(
-            self.brain_config
-        );
+        trainer = importlib.import_module("sellbird.trainer");
+        self.config["brain"] = trainer.brain_section(self.brain_config);
         if not config_file.exists() {
             if self.precleared {
                 _save_precleared(self.config, self.precleared);
@@ -844,27 +787,21 @@ class SetupWizard {
             if self.manual_product {
                 for section in ("persona", "product", "icp") {
                     if section in self.config {
-                        if not isinstance(existing.get(section), dict) {
-                            existing[section] = {};
-                        }
-                        _merge_answers(existing[section], self.config[section]);
+                        _merge_answers(_section(existing, section), self.config[section]);
                     }
                 }
             }
             existing["usage"] = self.config.get("usage", existing.get("usage", {}));
             existing["brain"] = self.config["brain"];
             if "LINKEDIN_EMAIL" in self.env_vars {
-                existing.setdefault("channels", {}).setdefault("linkedin", {})["enabled"] = bool(
-                    self.env_vars["LINKEDIN_EMAIL"]
-                );
+                linkedin = existing.setdefault("channels", {}).setdefault("linkedin", {});
+                linkedin["enabled"] = bool(self.env_vars["LINKEDIN_EMAIL"]);
             }
             if "channels" in self.config {
-                existing.setdefault("channels", {});
+                channels = existing.setdefault("channels", {});
                 if "email" in self.config["channels"] {
-                    existing["channels"].setdefault("email", {});
-                    existing["channels"]["email"]["max_daily_sends"] = self.config["channels"]["email"].get(
-                        "max_daily_sends", 50
-                    );
+                    sends = self.config["channels"]["email"].get("max_daily_sends", 50);
+                    channels.setdefault("email", {})["max_daily_sends"] = sends;
                 }
             }
             if self.precleared {
@@ -883,18 +820,18 @@ class SetupWizard {
 
     async def _print_summary {
         print(_DONE_BANNER);
-        codex = self.brain_config.provider == "codex";
-        checks = {
-            ("Codex CLI (ChatGPT plan)" if codex else "Claude Code CLI"): (
-                _check_codex_cli() if codex else _check_claude_cli()
-            ),
+        if self.brain_config.provider == "codex" {
+            checks = {"Codex CLI (ChatGPT plan)": _check_codex_cli()};
+        } else {
+            checks = {"Claude Code CLI": _check_claude_cli()};
+        }
+        precleared = bool(self.config_saved and self.precleared and self.precleared.get("enabled"));
+        checks |= {
             "Instantly API": bool(self.env_vars.get("INSTANTLY_API_KEY")),
             "LinkedIn": bool(self.env_vars.get("LINKEDIN_EMAIL")),
             "Cloudflare Crawl": bool(self.env_vars.get("CLOUDFLARE_ACCOUNT_ID")),
             "Product trained": _product_configured(),
-            "Cold-email check (Precleared)": bool(
-                self.config_saved and self.precleared and self.precleared.get("enabled")
-            ),
+            "Cold-email check (Precleared)": precleared,
         };
         for (name, ok) in checks.items() {
             print(f"  {'✓' if ok else '–'} {name}");
