@@ -89,15 +89,15 @@ graph import {
     sellbird.integrations.quota --> sellbird.brain { QuotaClient }
     sellbird.claude_runtime --> sellbird.brain;
     sellbird.claude_runtime --> sellbird.brain { ClaudeRuntimeError, check_cli, fingerprint }
-    sellbird.models.company --> sellbird.state { Company }
-    sellbird.models.prospect --> sellbird.state { Prospect }
-    sellbird.models.campaign --> sellbird.state { Campaign, EmailStep }
-    sellbird.models.conversation --> sellbird.state { Conversation, Message }
-    sellbird.paths --> sellbird.state { PROJECT_ROOT }
-    sellbird.startups --> sellbird.state { parse_funding }
-    sellbird.storage --> sellbird.state;
-    sellbird.storage --> sellbird.state { BUSY_TIMEOUT_SECONDS }
-    sellbird.workspace_home --> sellbird.state { _HOME }
+    sellbird.models.company ++> sellbird.state { Company }
+    sellbird.models.prospect ++> sellbird.state { Prospect }
+    sellbird.models.campaign ++> sellbird.state { Campaign }
+    sellbird.models.conversation ++> sellbird.state { Conversation }
+    sellbird.paths ++> sellbird.state { PROJECT_ROOT }
+    sellbird.startups ++> sellbird.state { parse_funding }
+    sellbird.storage as storage ++> sellbird.state;
+    sellbird.storage ++> sellbird.state { BUSY_TIMEOUT_SECONDS }
+    sellbird.workspace_home ++> sellbird.state { _HOME }
     sellbird.paths --> sellbird.workspace_home;
     sellbird.state --> sellbird.workspace_home;
     sellbird.usage --> sellbird.integrations.quota { claude_config_dir }

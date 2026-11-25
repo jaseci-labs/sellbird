@@ -777,7 +777,17 @@ def _patch_heartbeat(monkeypatch, cfg, state, calls, stop):
 
     monkeypatch.setattr(main_mod, "load_config", lambda: cfg)
     monkeypatch.setattr(main_mod, "load_env", lambda: SimpleNamespace())
-    monkeypatch.setattr(main_mod, "StateManager", lambda: state)
+    # main's StateManager() hands back this one state, and main's
+    # StateManager-typed parameters still accept it.
+    class HarnessState(type(state)):
+        def __new__(cls, *args, **kwargs):
+            return state
+
+        def __init__(self, *args, **kwargs):
+            pass
+
+    state.__class__ = HarnessState
+    monkeypatch.setattr(main_mod, "StateManager", HarnessState)
     monkeypatch.setattr(main_mod, "Brain", _Brain)
     monkeypatch.setattr(main_mod, "in_quiet_hours", lambda c: True)
     monkeypatch.setattr(main_mod, "_interruptible_sleep", stop_instead_of_sleeping)

@@ -106,7 +106,19 @@ class Harness:
         monkeypatch.setattr(main_mod, "run_profile_stage", no_profile)
         monkeypatch.setattr(main_mod, "load_config", lambda: self.config)
         monkeypatch.setattr(main_mod, "load_env", lambda: EnvConfig())
-        monkeypatch.setattr(main_mod, "StateManager", lambda: self.state)
+        state = self.state
+
+        # main's StateManager() hands back this one state, and main's
+        # StateManager-typed parameters still accept it.
+        class HarnessState(type(state)):
+            def __new__(cls, *args, **kwargs):
+                return state
+
+            def __init__(self, *args, **kwargs):
+                pass
+
+        state.__class__ = HarnessState
+        monkeypatch.setattr(main_mod, "StateManager", HarnessState)
         monkeypatch.setattr(main_mod, "in_quiet_hours", lambda config: False)
 
         async def one_cycle_sleep(seconds, stop_event):
