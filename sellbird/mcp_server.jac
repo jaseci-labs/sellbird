@@ -33,6 +33,7 @@ their dashboard token, and never read data/dashboard-token.
      MODEL_CALL_TIMEOUT = 180.0,
      WORKSPACE_PARAM_DOC = "Workspace id or name. Your default workspace when left out.",
      RESULT_WORKSPACE_KEY = "sellbird_workspace",
+     _PAUSED = "Sending is paused. Only the user can resume it, in the dashboard.",
      _TOOLS = """
 today /api/today What needs the user now, and the pipeline at a glance. Start here.
 setup_status /api/setup-status Which setup steps are done and what's still missing, from install to sending.
@@ -193,10 +194,9 @@ def _with_workspace(fn: any, workspace_arg: WorkspaceArg) -> any {
     wrapper = functools.update_wrapper(functools.partial(_workspace_call, fn, workspace_arg), fn);
     wrapper.__signature__ = sig.replace(parameters=[*sig.parameters.values(), param]);
     annotations: builtins.dict = {p.name: p.annotation for p in sig.parameters.values()};
-    wrapper.__annotations__ = annotations | {
-        "workspace": param.annotation,
-        "return": sig.return_annotation,
-    };
+    annotations["workspace"] = param.annotation;
+    annotations["return"] = sig.return_annotation;
+    wrapper.__annotations__ = annotations;
     return wrapper;
 }
 
@@ -266,10 +266,8 @@ obj _Tools {
         limit: int = 100,
         preset: str = "",
     ) -> builtins.dict {
-        body = dict(
-            provider=provider, cities=cities or [], depth=depth, limit=limit, preset=preset
-        );
-        return await self._post("/api/discover/estimate", body);
+        body = dict(provider=provider, cities=cities or [], depth=depth, limit=limit);
+        return await self._post("/api/discover/estimate", body | {"preset": preset});
     }
 
     async def sending_status -> builtins.dict {
@@ -285,9 +283,8 @@ obj _Tools {
     }
 
     async def offer_preview(`entry: str) -> builtins.dict {
-        return await self._post(
-            "/api/offer/preview", {"entry": `entry}, timeout=MODEL_CALL_TIMEOUT
-        );
+        body = {"entry": `entry};
+        return await self._post("/api/offer/preview", body, timeout=MODEL_CALL_TIMEOUT);
     }
 
     async def offer_propose(`entry: str, why: str = "") -> builtins.dict {
@@ -295,9 +292,8 @@ obj _Tools {
     }
 
     async def inbox_pause(inbox_id: str, reason: str = "") -> builtins.dict {
-        return await self._post(
-            f"/api/inboxes/{quote(inbox_id, safe='')}/pause", {"reason": reason}
-        );
+        path = f"/api/inboxes/{quote(inbox_id, safe='')}/pause";
+        return await self._post(path, {"reason": reason});
     }
 }
 
@@ -309,14 +305,7 @@ async def _live_and_mode(c: CoreClient) -> builtins.dict {
 
 async def _pause(c: CoreClient) -> builtins.dict {
     result = await c.post("/api/sending/pause");
-    if result.get("ok") is False {
-        return result;
-    }
-    return {
-        **result,
-        "paused": True,
-        "message": "Sending is paused. Only the user can resume it, in the dashboard.",
-    };
+    return result if result.get("ok") is False else {**result, "paused": True, "message": _PAUSED};
 }
 
 def build_server(
@@ -333,9 +322,8 @@ def build_server(
     tools = _Tools(client_factory, unavailable_message);
     for spec in re.split(r"\n(?=\S)", _TOOLS.strip()) {
         (name, path, text) = spec.split(" ", 2);
-        tool = functools.partial(getattr(tools, name))
-            if path == "-"
-            else functools.partial(tools._read, path);
+        (fn, args) = (getattr(tools, name), ()) if path == "-" else (tools._read, (path,));
+        tool = functools.partial(fn, *args);
         tool.__name__ = name;
         server.tool(description=re.sub(r"\n\s+", "\n", text))(tool);
     }
