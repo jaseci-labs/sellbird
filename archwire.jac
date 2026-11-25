@@ -424,7 +424,7 @@ graph import {
     sellbird.inbox_routes --> sellbird.dashboard { router }
     sellbird.extensions --> sellbird.dashboard;
     sellbird.dashboard_instance --> sellbird.dashboard;
-    sellbird.extensions --> sellbird.agent_policy;
+    sellbird.extensions as extensions ++> sellbird.agent_policy;
     sellbird.config --> sellbird.register { ComplianceConfig, live_do_not_contact }
     sellbird.fit --> sellbird.register { company_fit, current_roles }
     sellbird.gate --> sellbird.register { do_not_contact_match }

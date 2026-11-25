@@ -82,7 +82,7 @@ files = [
     "harvey/cli.jac",
     "sellbird/__init__.jac",
     "sellbird/__main__.jac",
-    "sellbird/agent_policy.py",
+    "sellbird/agent_policy.jac",
     "sellbird/agents/__init__.jac",
     "sellbird/agents/analyst.jac",
     "sellbird/agents/handler.py",
