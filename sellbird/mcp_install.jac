@@ -11,7 +11,7 @@ import tomllib;
 import from dataclasses { dataclass }
 import from datetime { datetime }
 import from pathlib { Path }
-import from typing { Callable, Literal, Mapping }
+import from typing { Literal }
 
 glob SERVER_NAME = "sellbird",
      CODEX_MARKER = "# Added by Sellbird (sellbird mcp install). Remove with: sellbird mcp uninstall codex",
@@ -31,8 +31,14 @@ glob SERVER_NAME = "sellbird",
      _BARE_KEY = re.compile("^[A-Za-z0-9_-]+$"),
      _HEADER = re.compile("^\\s*\\["),
      _OUR_HEADER = re.compile(
-         "^\\s*\\[\\s*mcp_servers\\s*\\.\\s*(sellbird|\"sellbird\"|'sellbird')\\s*\\]\\s*(#.*)?$"
-     );
+         r"""^\s*\[\s*mcp_servers\s*\.\s*(sellbird|"sellbird"|'sellbird')\s*\]\s*(#.*)?$"""
+     ),
+     _NOTHING_CLAUDE = "Sellbird isn't set up for Claude Code; nothing to remove.",
+     _NOTHING_CODEX = "Sellbird isn't set up for Codex; nothing to remove.",
+     _HALF_DONE = "The old Sellbird entry was removed and the new one couldn't be added ({}).",
+     _UNEXPECTED = "Claude Code's config didn't end up as expected after `claude mcp`.",
+     _RUN = {"capture_output": True, "text": True, "encoding": "utf-8", "errors": "replace"},
+     _TOML_ESCAPES = (("\\", "\\\\"), ("\"", "\\\""), ("\n", "\\n"), ("\r", "\\r"), ("\t", "\\t"));
 
 class InstallError(Exception) {}
 
@@ -51,11 +57,8 @@ class PlannedChange {
 }
 
 def server_entry -> dict[str, any] {
-    return {
-        "command": sys.executable,
-        "args": ["-P", "-m", "sellbird", "mcp"],
-        "env": {HOME_ENV: `str(PROJECT_ROOT)},
-    };
+    args = ["-P", "-m", "sellbird", "mcp"];
+    return {"command": sys.executable, "args": args, "env": {HOME_ENV: `str(PROJECT_ROOT)}};
 }
 
 def is_ours(candidate: any) -> bool {
@@ -74,10 +77,8 @@ def _same(candidate: any) -> bool {
     if not isinstance(candidate, `dict) {
         return False;
     }
-    if candidate.get("type") == "stdio" {
-        candidate = {k: v for (k, v) in candidate.items() if k != "type"};
-    }
-    return candidate == server_entry();
+    kept: dict[str, any] = {k: v for (k, v) in candidate.items() if (k, v) != ("type", "stdio")};
+    return kept == server_entry();
 }
 
 def _prefixed(sign: str, text: str) -> list[str] {
@@ -114,9 +115,7 @@ def _claude_entry_preview(old: any, new: any) -> str {
     return "\n".join(lines);
 }
 
-def _claude_cli_argv(
-    claude: str, verb: str, previous: dict[str, any] | None = None
-) -> tuple[any, ...] {
+def _claude_cli_argv(claude: str, verb: str, previous: any = None) -> tuple[any, ...] {
     if verb != "add" {
         return (claude, "mcp", "remove", SERVER_NAME, "--scope", "user");
     }
@@ -139,9 +138,7 @@ def _plan_claude(home: Path, which: any, install: bool) -> PlannedChange {
         return PlannedChange("claude", "none", path, "");
     }
     if not install and current is None {
-        return PlannedChange(
-            "claude", "none", path, "", "Sellbird isn't set up for Claude Code; nothing to remove."
-        );
+        return PlannedChange("claude", "none", path, "", _NOTHING_CLAUDE);
     }
     if current is not None and not is_ours(current) {
         return PlannedChange("claude", "refuse", path, "", REFUSE_FOREIGN_CLAUDE);
@@ -159,15 +156,13 @@ def _plan_claude(home: Path, which: any, install: bool) -> PlannedChange {
     return PlannedChange("claude", "cli", path, preview, "", argv, pre, old_json);
 }
 
-def plan_claude(
-    *, home: Path, which: any = shutil.which, runner: any = subprocess.run
-) -> PlannedChange {
+def plan_claude(*, home: Path, which: any = shutil.which, runner: any = subprocess.run) -> any {
     return _plan_claude(home, which, True);
 }
 
 def plan_uninstall_claude(
     *, home: Path, which: any = shutil.which, runner: any = subprocess.run
-) -> PlannedChange {
+) -> any {
     return _plan_claude(home, which, False);
 }
 
@@ -187,9 +182,8 @@ def _claude_new_text(action: str, text: str) -> str {
 }
 
 def _parts(client: str, text: str) -> tuple[any, ...] {
-    (key, loads) = ("mcpServers", json.loads)
-        if client == "claude"
-        else ("mcp_servers", tomllib.loads);
+    key = "mcpServers" if client == "claude" else "mcp_servers";
+    loads = json.loads if client == "claude" else tomllib.loads;
     doc: any = loads(text) if text else {};
     servers: any = `dict(doc.get(key) or {});
     ours = servers.pop(SERVER_NAME, None);
@@ -200,7 +194,7 @@ def _parts(client: str, text: str) -> tuple[any, ...] {
     return (rest, ours);
 }
 
-def _codex_path(env: Mapping[str, str], home: Path) -> Path {
+def _codex_path(env: any, home: Path) -> Path {
     return Path(env.get("CODEX_HOME") or Path(home) / ".codex") / "config.toml";
 }
 
@@ -208,13 +202,7 @@ def _toml_str(value: str) -> str {
     if "'" not in value and "\n" not in value and "\r" not in value {
         return f"'{value}'";
     }
-    for (raw, escaped) in (
-        ("\\", "\\\\"),
-        ("\"", "\\\""),
-        ("\n", "\\n"),
-        ("\r", "\\r"),
-        ("\t", "\\t"),
-    ) {
+    for (raw, escaped) in _TOML_ESCAPES {
         value = value.replace(raw, escaped);
     }
     return f"\"{value}\"";
@@ -259,9 +247,7 @@ def _our_block(text: str) -> tuple[int, int] | None {
         while end < len(lines) and not _HEADER.match(lines[end]) {
             end += 1;
         }
-        while end > i + 1
-            and (not lines[end - 1].strip() or lines[end - 1].lstrip().startswith("#"))
-        {
+        while end > i + 1 and lines[end - 1].strip()[:1] in ("", "#") {
             end -= 1;
         }
         return (i - 1, end);
@@ -269,7 +255,7 @@ def _our_block(text: str) -> tuple[int, int] | None {
     return None;
 }
 
-def _plan_codex(env: Mapping[str, str], home: Path, install: bool) -> PlannedChange {
+def _plan_codex(env: any, home: Path, install: bool) -> PlannedChange {
     path = _codex_path(env, home);
     (text, doc, refusal) = _read_codex(path);
     if refusal {
@@ -280,9 +266,7 @@ def _plan_codex(env: Mapping[str, str], home: Path, install: bool) -> PlannedCha
         return PlannedChange("codex", "none", path, "");
     }
     if not install and current is None {
-        return PlannedChange(
-            "codex", "none", path, "", "Sellbird isn't set up for Codex; nothing to remove."
-        );
+        return PlannedChange("codex", "none", path, "", _NOTHING_CODEX);
     }
     new = _prefixed("+", render_codex_block(server_entry())) if install else [];
     if current is None {
@@ -293,16 +277,15 @@ def _plan_codex(env: Mapping[str, str], home: Path, install: bool) -> PlannedCha
         return PlannedChange("codex", "refuse", path, "", REFUSE_FOREIGN_CODEX);
     }
     old = "".join(text.splitlines(keepends=True)[block[0]:block[1]]);
-    return PlannedChange(
-        "codex", "replace" if install else "remove", path, "\n".join(_prefixed("-", old) + new)
-    );
+    action = "replace" if install else "remove";
+    return PlannedChange("codex", action, path, "\n".join(_prefixed("-", old) + new));
 }
 
-def plan_codex(*, env: Mapping[str, str], home: Path) -> PlannedChange {
+def plan_codex(*, env: any, home: Path) -> PlannedChange {
     return _plan_codex(env, home, True);
 }
 
-def plan_uninstall_codex(*, env: Mapping[str, str], home: Path) -> PlannedChange {
+def plan_uninstall_codex(*, env: any, home: Path) -> PlannedChange {
     return _plan_codex(env, home, False);
 }
 
@@ -355,10 +338,8 @@ def _write_atomic(target: Path, text: str) {
 }
 
 def _write_private(path: Path, data: bytes, *, exclusive: bool) {
-    flags = os.O_WRONLY
-        | os.O_CREAT
-        | getattr(os, "O_BINARY", 0)
-        | (os.O_EXCL if exclusive else os.O_TRUNC);
+    flags = os.O_WRONLY | os.O_CREAT | getattr(os, "O_BINARY", 0);
+    flags |= os.O_EXCL if exclusive else os.O_TRUNC;
     with os.fdopen(os.open(path, flags, 0o600), "wb") as f {
         f.write(data);
     }
@@ -417,9 +398,7 @@ def _apply_file(change: PlannedChange, now: datetime) {
     data = _read(change);
     try {
         original = data.decode("utf-8") if data is not None else "";
-        new_text = _claude_new_text(change.action, original)
-            if claude
-            else _codex_new_text(change.action, original);
+        new_text = (_claude_new_text if claude else _codex_new_text)(change.action, original);
     } except (ValueError, UnicodeDecodeError) {
         raise InstallError(REFUSE_BAD_JSON if claude else REFUSE_BAD_TOML);
     }
@@ -445,14 +424,7 @@ def _apply_file(change: PlannedChange, now: datetime) {
 
 def _run_cli(argv: tuple[str, ...], runner: any) {
     try {
-        result = runner(
-            `list(argv),
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=60,
-        );
+        result = runner(`list(argv), **_RUN, timeout=60);
     } except (OSError, subprocess.SubprocessError) as e {
         raise InstallError(f"`{shlex.join(argv[:3])}` couldn't run ({`type(e).__name__})");
     }
@@ -480,19 +452,14 @@ def _apply_cli(change: PlannedChange, runner: any, now: datetime, *, expect_abse
         try {
             _run_cli(_claude_cli_argv(change.argv[0], "add", json.loads(change.old_json)), runner);
         } except InstallError {
-            raise InstallError(
-                f"The old Sellbird entry was removed and the new one couldn't be added ({add_failed})."
-                    + _kept_at(backup),
-            );
+            raise InstallError(_HALF_DONE.format(add_failed) + _kept_at(backup));
         }
         raise InstallError(f"{add_failed}. Your previous Sellbird entry was put back.");
     }
     (doc, refusal) = _read_claude(change.path);
     current = (doc or {}).get("mcpServers", {}).get(SERVER_NAME);
     if refusal or not (current is None if expect_absent else _same(current)) {
-        raise InstallError(
-            "Claude Code's config didn't end up as expected after `claude mcp`." + _kept_at(backup)
-        );
+        raise InstallError(_UNEXPECTED + _kept_at(backup));
     }
 }
 
@@ -511,9 +478,8 @@ def apply_change(change: PlannedChange, *, runner: any = subprocess.run, now: da
         return f"{done} Start a new Claude Code session to use it.";
     }
     _apply_file(change, now);
-    return f"{done} {RESTART_CLAUDE}"
-        if change.client == "claude"
-        else f"{done} Restart Codex to pick it up.";
+    restart = RESTART_CLAUDE if change.client == "claude" else "Restart Codex to pick it up.";
+    return f"{done} {restart}";
 }
 
 def print_config -> str {
@@ -533,12 +499,12 @@ def run_command(
     print_only: bool = False,
     yes: bool = False,
     home: Path | None = None,
-    env: Mapping[str, str] | None = None,
+    env: any | None = None,
     which: any = shutil.which,
     runner: any = subprocess.run,
-    isatty: Callable[[], bool] | None = None,
-    ask: Callable[[str], str] = builtins.input,
-    out: Callable[[str], None] = builtins.print,
+    isatty: any = None,
+    ask: any = builtins.input,
+    out: any = builtins.print,
     now: datetime | None = None,
 ) -> int {
     try {
@@ -560,13 +526,7 @@ def run_command(
     codex_found = client is None
         and (`bool(which("codex")) or _codex_path(env, home).parent.is_dir());
     code = _show_and_apply(
-        change,
-        yes=yes,
-        isatty=isatty or sys.stdin.isatty,
-        ask=ask,
-        out=out,
-        runner=runner,
-        now=now or datetime.now(),
+        change, yes, isatty or sys.stdin.isatty, ask, out, runner, now or datetime.now()
     );
     if codex_found {
         verb = "add Sellbird to it too" if install else "remove Sellbird from it too";
@@ -576,7 +536,7 @@ def run_command(
 }
 
 def _show_and_apply(
-    change: PlannedChange, *, yes: bool, isatty: any, ask: any, out: any, runner: any, now: datetime
+    change: PlannedChange, yes: bool, isatty: any, ask: any, out: any, runner: any, now: datetime
 ) -> int {
     if change.action == "refuse" {
         out(change.reason);
