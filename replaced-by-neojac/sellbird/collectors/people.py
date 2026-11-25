@@ -929,7 +929,7 @@ def menu_links(html: str, page_url: str, limit: int = 5) -> list[str]:
         seen.add(key)
         scored.append((-score, len(p.path), i, url))
     scored.sort()
-    return [url for *_, url in scored[:limit]]
+    return [s[3] for s in scored[:limit]]
 
 
 # ── addresses on a page ──────────────────────────────────────────────────

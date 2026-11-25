@@ -201,15 +201,6 @@ graph import {
     sellbird.config --> sellbird.collectors.discover { live_do_not_contact, load_env }
     sellbird.gate --> sellbird.collectors.discover { do_not_contact_domain_match }
     sellbird.signals --> sellbird.collectors.discover { seed_signal_catalog }
-    sellbird.collectors.profile --> sellbird.collectors.people {
-        NON_NAME_WORDS,
-        ProfileCollector,
-        _NOUN_SUFFIX,
-        _reads_like_title,
-        _strip_code,
-        fold_accents,
-        nfc,
-    }
     sellbird.brain --> sellbird.agents.scout { Brain }
     sellbird.collectors.people --> sellbird.agents.scout;
     sellbird.collectors.discover --> sellbird.agents.scout { site_name_from_html }
@@ -1642,6 +1633,15 @@ graph import {
         build_command,
         isolated_cwd,
         runtime_env,
+    }
+    sellbird.collectors.profile ++> sellbird.collectors.people {
+        NON_NAME_WORDS,
+        _NOUN_SUFFIX,
+        _reads_like_title,
+        _strip_code,
+        fold_accents,
+        nfc,
+        ProfileCollector,
     }
 }
 
