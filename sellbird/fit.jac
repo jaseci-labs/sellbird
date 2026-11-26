@@ -16,7 +16,7 @@ def _role_matches(text: str, terms: list[str]) -> str {
     return next((t for t in terms if re.search(f"(?<![\\w-]){re.escape(t)}(?![\\w-])", low)), "");
 }
 
-def current_roles(observations: list[any]) -> list[any] {
+def current_roles(observations: any) -> list[any] {
     roles = sorted(
         [o for o in observations if o.get("signal_code") == "HIRING_ROLE"],
         key=lambda (o: any) -> any { o.get("observed_at") or "" },
@@ -30,7 +30,7 @@ def current_roles(observations: list[any]) -> list[any] {
 }
 
 def company_fit(
-    company: any, prospects: list[any], observations: list[any], config: any, dnc: any = None
+    company: any, prospects: any, observations: any, config: any, dnc: any = None
 ) -> tuple[int, list[str]] {
     icp = config.icp;
     if dnc is None {
@@ -54,12 +54,15 @@ def company_fit(
     named = [p for p in live if (p.get("first_name") or "").strip()];
     makers = [p for p in named if icp.titles and title_matches(p.get("title") or "", icp.titles)];
     if not makers and icp.titles {
-        seen = [
-            (o.get("value_text") or "").split("—", 1)[-1].strip(" ~()")
-            for o in observations
-            if o.get("signal_code") == "DECISION_MAKER_TITLE"
-        ];
-        makers = [{"title": t} for t in seen if title_matches(t, icp.titles)][:1];
+        for o in observations {
+            if o.get("signal_code") == "DECISION_MAKER_TITLE" {
+                t = str((o.get("value_text") or "").split("—", 1)[-1].strip(" ~()"));
+                if title_matches(t, icp.titles) {
+                    makers.append({"title": t});
+                    break;
+                }
+            }
+        }
     }
     if makers {
         found.append((DECISION_MAKER, f"decision maker: {makers[0].get('title')}"));

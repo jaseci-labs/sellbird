@@ -1,3 +1,8 @@
+[project]
+# The benchmark harness runs the original Python beside this build; it is
+# tooling, not part of either program.
+exclude = ["scripts/perf/*"]
+
 [pypi."."]
 [pypi.".".build-system]
 requires = ["setuptools>=68.0"]

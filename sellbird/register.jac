@@ -22,7 +22,7 @@ glob COLUMNS = "company website sector area fit why_selected status why_not_cont
      _WHY_IRRELEVANT = "Contacts found were not relevant (e.g. not a factory, wrong person)",
      _WHY_READY = "Deliverable email found; Sellbird will write to it on a coming cycle";
 
-def _contact(p: dict[any, any]) -> str {
+def _contact(p: any) -> str {
     name = f"{p.get('first_name') or ''} {p.get('last_name') or ''}".strip() or "General inbox";
     title = p.get("title") or "";
     label = name + (f" ({title})" if title and title != "General inbox" else "");
@@ -80,7 +80,7 @@ def company_status(
     form = " Contact form available." if has_form else "";
     who = ", ".join(sorted({(p.get("title") or "contact") for p in live}))[:120];
     checked = "Website read, but no named person or usable email on it.";
-    rules = [
+    rules: list[tuple[any, tuple[str, str]]] = [
         ("verified" in statuses or (send_to_risky and "risky" in statuses), ("Ready", _WHY_READY)),
         ("risky" in statuses, (_NOT, _WHY_RISKY + form)),
         (live and statuses <= {"guess", "invalid", ""}, (_NOT, f"Found {who}, {_NO_MAIL}{form}")),
@@ -178,11 +178,11 @@ def _cell(value: any) -> any {
     return "'" + text if unsafe else text;
 }
 
-def _csv_row(row: dict[str, any]) -> dict[str, any] {
+def _csv_row(row: any) -> dict[str, any] {
     return {k: _cell(row.get(k)) for k in COLUMNS};
 }
 
-def to_csv(rows: list[dict[str, any]]) -> str {
+def to_csv(rows: list[any]) -> str {
     buf = io.StringIO();
     writer = csv.DictWriter(buf, fieldnames=COLUMNS, extrasaction="ignore");
     writer.writeheader();

@@ -302,7 +302,7 @@ def _clean_uncached(title: str, target: str) -> str {
 
 def title_matches(title: str, targets: any, owner: bool = False) -> bool {
     title = (title or "").strip();
-    wanted = [_norm_title(t.strip()) for t in targets or [] if t and t.strip()];
+    wanted = [_norm_title(str(t.strip())) for t in targets or [] if t and t.strip()];
     if not wanted or re.search(_FORMER, fold_accents(title)) {
         return False;
     }

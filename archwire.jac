@@ -1061,8 +1061,6 @@ graph import {
     sellbird.register --> tests.test_register;
     sellbird.cli --> tests.test_accelerators_funding;
     sellbird.paths --> tests.test_login_item;
-    sellbird.dashboard --> tests.test_compliance_footer;
-    sellbird.dashboard --> tests.test_precleared_hold;
     sellbird.legacy ++> sellbird { adopt_legacy_env }
     sellbird.collectors.profile ++> sellbird.pipeline { profile_companies }
     sellbird.collectors.discover ++> sellbird.pipeline { DEFAULT_PROVIDER, run_discovery }
