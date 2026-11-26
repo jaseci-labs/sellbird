@@ -30,11 +30,7 @@ def current_roles(observations: list[any]) -> list[any] {
 }
 
 def company_fit(
-    company: any,
-    prospects: list[any],
-    observations: list[any],
-    config: any,
-    dnc: any = None,
+    company: any, prospects: list[any], observations: list[any], config: any, dnc: any = None
 ) -> tuple[int, list[str]] {
     icp = config.icp;
     if dnc is None {
