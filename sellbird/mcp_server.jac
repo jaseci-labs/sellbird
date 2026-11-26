@@ -315,6 +315,7 @@ def build_server(
     unavailable_message: str | None = None,
     instructions: str = INSTRUCTIONS,
 ) -> MCPServer {
+    import sellbird.extensions as extensions;
     server = MCPServer("sellbird", instructions=instructions);
     if workspace_arg is not None {
         _add_workspace_arg(server, workspace_arg);
