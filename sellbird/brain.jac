@@ -44,6 +44,7 @@ def active_brain_status(raw: str, provider: str) -> dict[str, any] {
 class BrainUnavailable(Exception) {}
 
 def _read_knowledge(folder: str, name: str) -> str {
+    import from sellbird.home { bundled_defaults }
     mine = getattr(current_home(), f"{folder}_dir") / f"{name}.md";
     try {
         return read_user_text(mine);
@@ -128,6 +129,8 @@ class Brain {
         _status_synced: bool = False;
 
     def init(state: StateManager, brain_config: any = None, transport: any = None) {
+    import from sellbird.integrations.quota { QuotaClient }
+    import from sellbird.codex { CodexClient, CodexQuotaClient }
         self.state = state;
         self.transport = transport;
         self.config = brain_config or BrainConfig();
@@ -163,6 +166,7 @@ class Brain {
     }
 
     async def preflight -> str {
+        import from sellbird.codex { CodexError }
         if self.provider != "codex" {
             return "" if (await self._claude_ready()) is not None else self.unavailable;
         }
@@ -212,6 +216,7 @@ class Brain {
     }
 
     async def _claude_ready -> any {
+        import from sellbird.claude_runtime { ClaudeRuntimeError, check_cli }
         try {
             executable = await asyncio.to_thread(check_cli);
         } except ClaudeRuntimeError as e {
@@ -225,6 +230,7 @@ class Brain {
     }
 
     def _fingerprint -> any {
+        import from sellbird.claude_runtime { fingerprint }
         return self.codex.fingerprint() if self.provider == "codex" else fingerprint();
     }
 
@@ -284,6 +290,7 @@ class Brain {
         agent: str = "",
         task: str = "",
     ) -> str {
+        import from sellbird.claude_runtime { build_command, isolated_cwd, runtime_env }
         if self.transport is not None {
             if self.paused_reason {
                 return "";
@@ -404,6 +411,7 @@ class Brain {
     async def _think_codex(
         prompt: str, session_id: str | None, timeout: float, max_retries: int, agent: str, task: str
     ) -> str {
+        import from sellbird.codex { CodexError }
         paused = self.paused_reason;
         if paused {
             logger.debug(f"Codex call skipped: {paused}");
