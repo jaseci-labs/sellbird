@@ -6,7 +6,6 @@ import re;
 import from abc { ABC, abstractmethod }
 import from collections.abc { Sequence }
 import from dataclasses { dataclass, field }
-import from email.message { EmailMessage }
 import from typing { Protocol }
 
 glob logger: any = logging.getLogger("sellbird.mail"),
@@ -169,7 +168,8 @@ def get_mail_provider(config: any, env: any) -> MailProvider | None {
 
 def compose(
     to: str, sender: str, subject: str, body: str, sig: any, headers: any, ref: str, mid: str = ""
-) -> EmailMessage {
+) -> any {
+    import from email.message { EmailMessage }
     import from sellbird.integrations.signature { set_body }
     msg = EmailMessage();
     for (name, value) in [("To", to), ("From", sender), ("Subject", subject), *headers] {

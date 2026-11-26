@@ -48,7 +48,7 @@ Times in milliseconds. "Python / after" above 1.00x means the Jac is faster.
 | `import sellbird.cli` | 65 | 67 | 68 | 0.96x | same |
 | `import sellbird.dashboard` | 337 | 490 | 339 | 1.00x | same |
 | `import sellbird.mcp_server` | 595 | 589 | 592 | 1.01x | same |
-| `import sellbird.main` (the `run` loop) | 186 | 231 | 194 | 0.96x | same |
+| `import sellbird.main` (the `run` loop) | 181 | 231 | 182 | 1.00x | same (11-round rerun after the last fix, load 2.3) |
 | `sellbird --help` | 227 | 242 | 230 | 0.99x | same |
 | `sellbird status` | 445 | 466 | 452 | 0.98x | same |
 | `sellbird signals` | 243 | 259 | 247 | 0.98x | same |
@@ -131,13 +131,13 @@ stays in `archwire.jac`, and an in-body import is emitted as a call-time import.
 | Entry point | Modules loaded: Python | Jac before | Jac after |
 |---|---:|---:|---:|
 | `import sellbird.dashboard` | 470 | 669 | 471 |
-| `import sellbird.main` | 277 | 359 | 294 |
+| `import sellbird.main` | 277 | 359 | 278 |
 | `sellbird --help` | 322 | 349 | 323 |
 | `sellbird discover --providers` | 376 | 381 | 377 |
 
 The one extra module everywhere is neojac's runtime, `_jac_sellbird`. The same treatment went to
 `brain` (codex, quota, claude_runtime, home), `mail_provider` (http.server, webbrowser, the
-signature module), `inbox_cli`, `inbox_routes` and `desktop_cli` (SMTP and log redaction),
+signature module, `email.message`), `inbox_cli`, `inbox_routes` and `desktop_cli` (SMTP and log redaction),
 discovery (ATS, gate, signals), `gate` (untrusted) and `mcp_server` (extensions). The OAuth
 loopback server moved to its own module, `sellbird/integrations/loopback.jac`, because a class
 cannot subclass a module imported in a function body (blocker 4).
@@ -147,7 +147,7 @@ similar names. With call-time imports, the patch target is the source module aga
 back to the original tests' targets. Five of them are now identical to the original;
 `test_pidfile.py` keeps the rewrite's `LOCK_FILE` patches, which still apply.
 
-Effect: dashboard start-up 490 → 339 ms; `import sellbird.main` 231 → 194 ms; every command
+Effect: dashboard start-up 490 → 339 ms; `import sellbird.main` 231 → 182 ms; every command
 12–16 ms faster.
 
 ### 2. No runtime conversion of row lists at typed boundaries
