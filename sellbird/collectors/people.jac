@@ -36,8 +36,12 @@ glob COMMON_WORDS = frozenset(
              "service services").split(),
      ),
      _PARTICLES = frozenset("van von de der den del della di da la le du dos das st".split()),
-     _HONORIFIC = "(?i)^(?:(?:dre?|mr|mrs|ms|miss|prof|rev|hon|mme|mlle|me)\\.?|m\\.)\\s+",
-     _CREDENTIAL_TAIL = "(?i)(?:\\s*,?\\s+(?:dds|dmd|md|do|dvm|od|phd|jd|esq|cpa|pe|ra|rn|np|pa|mba|ms|ma|facs|fagd|ccc-slp|jr|sr|ii|iii|iv)\\.?)+\\s*$",
+     _HONORIFIC = re.compile(
+         "(?i)^(?:(?:dre?|mr|mrs|ms|miss|prof|rev|hon|mme|mlle|me)\\.?|m\\.)\\s+"
+     ),
+     _CREDENTIAL_TAIL = re.compile(
+         "(?i)(?:\\s*,?\\s+(?:dds|dmd|md|do|dvm|od|phd|jd|esq|cpa|pe|ra|rn|np|pa|mba|ms|ma|facs|fagd|ccc-slp|jr|sr|ii|iii|iv)\\.?)+\\s*$",
+     ),
      _NAME_TOKEN = "^[A-Z][a-z]+(?:[-'’][A-Z]?[a-z]+)*\\.?$|^[A-Z]\\.$|^[A-Z]$",
      _OWNER_FAMILY = ("owner|co-owner|founder|co-founder|cofounder|president|ceo|chief executive|"
          "chief executive officer|principal|proprietor|managing partner|founding partner|"
@@ -84,7 +88,9 @@ glob _GENERIC_BUSINESS_WORDS = frozenset(
      ),
      MAX_QUOTE_CHARS = 8000,
      MAX_QUOTES = 200,
-     _LINE_BREAK = "(?i)<(?:/?(?:p|div|li|ul|ol|h[1-6]|section|article|header|footer|nav|td|tr|table|blockquote|figcaption|dt|dd|span|a|strong|b|em|label|button)\\b[^>]*|br\\s*/?)>",
+     _LINE_BREAK = re.compile(
+         "(?i)<(?:/?(?:p|div|li|ul|ol|h[1-6]|section|article|header|footer|nav|td|tr|table|blockquote|figcaption|dt|dd|span|a|strong|b|em|label|button)\\b[^>]*|br\\s*/?)>",
+     ),
      _QUOTE_LINE = "^\\s*[\\\"“‘'«]|[\\\"”’»]\\s*$|[★⭐]",
      _SEPARATED = "^(?P<name>(?:[^,|–—\\-]|(?<=\\w)-(?=\\w)){4,45}?)\\s*(?:,|\\||–|—|\\s-\\s)\\s*(?P<title>.{2,80})$",
      _STRONG_ROLE = "(?i)\\b(?:owner|co-?owner|founder|co-?founder|president|ceo|cfo|coo|cto|cmo|cro|chief|principal|partner|proprietor|director|manager|attorney|lawyer|dds|dmd|md|esq|cpa|dentist|orthodontist|officer|head of|vp|vice president|superintendent|estimator|administrator|co-?proprietaire|proprietaire|presidente?|pdg|co-?fondat(?:eur|rice)|fondat(?:eur|rice)|directeur|directrice|gerante?|associee?|vice-presidente?|estimat(?:eur|rice)|contremaitre|superviseure?|comptable|ingenieure?)\\b",
@@ -200,9 +206,11 @@ def _word_ok(token: str) -> bool {
 }
 
 def split_person_name(text: str) -> tuple[str, str] | None {
-    text = re.sub("\\s+", " ", html_lib.unescape(text or "").replace("\xa0", " ")).strip(" ,.-|–—");
-    text = re.sub(_HONORIFIC, "", re.sub("(?i)^(?:meet|introducing)\\s+", "", text));
-    text = nfc(re.sub(_CREDENTIAL_TAIL, "", text).strip(" ,"));
+    text = str(
+        re.sub("\\s+", " ", html_lib.unescape(text or "").replace("\xa0", " ")).strip(" ,.-|–—")
+    );
+    text = str(_HONORIFIC.sub("", re.sub("(?i)^(?:meet|introducing)\\s+", "", text)));
+    text = nfc(str(_CREDENTIAL_TAIL.sub("", text).strip(" ,")));
     tokens = text.split();
     odd = len(text) > 45 or any(ch.isdigit() for ch in text) or "@" in text;
     if odd or len(tokens) not in (2, 3, 4, 5) {
@@ -411,9 +419,9 @@ def drop_quoted(html: str) -> str {
 }
 
 def page_lines(html: str) -> list[str] {
-    text = re.sub(_LINE_BREAK, "\n", _strip_code(nfc(html)));
+    text = _LINE_BREAK.sub("\n", _strip_code(nfc(html)));
     text = html_lib.unescape(re.sub("(?s)<[^>]+>", " ", text)).replace("\xa0", " ");
-    lines = [re.sub("\\s+", " ", line).strip(" |·•") for line in text.split("\n")];
+    lines = [str(re.sub("\\s+", " ", line).strip(" |·•")) for line in text.split("\n")];
     return [line for line in lines if line];
 }
 
@@ -426,7 +434,7 @@ def _sentences(html: str) -> list[str] {
     for block in text.split("\n") {
         block = re.sub(abbrev, "\\1.\xa0", re.sub("\\s+", " ", block).strip());
         out.extend([
-            s.strip()
+            str(s.strip())
             for s in re.split("(?<=[.!?]) +(?=[A-ZÀ-ÖØ-Þ])", block)
             if s.strip()
         ]);

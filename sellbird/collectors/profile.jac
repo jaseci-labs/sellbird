@@ -145,9 +145,11 @@ glob YC_OWNED_DOMAINS = ("ycombinator.com", "workatastartup.com", "startupschool
      _FOUNDED_PREFIX = "(?:founded in \\d{4},?\\s+)?",
      _YC_NOUNS = "company|startup|platform|product|business|team|tool",
      _YC_EVENTS = "startup school|demo day|application|interview|events?|podcast|blog|news|jobs|deals?|perks?",
-     _ATTR_TEXT_RE = "(?i)\\b(?:alt|title|aria-label)=[\"']([^\"']{0,200})[\"']",
-     _BLOCK_TAG_RE = "(?i)</?(?:p|div|h[1-6]|li|ul|ol|br|section|footer|header|nav|article|td|tr|table|blockquote|figcaption|dt|dd)\\b[^>]*>",
-     _SENTENCE_RE = "(?<=[.!?])\\s+|\\s*[|•·]\\s*|\\n",
+     _ATTR_TEXT_RE = re.compile("(?i)\\b(?:alt|title|aria-label)=[\"']([^\"']{0,200})[\"']"),
+     _BLOCK_TAG_RE = re.compile(
+         "(?i)</?(?:p|div|h[1-6]|li|ul|ol|br|section|footer|header|nav|article|td|tr|table|blockquote|figcaption|dt|dd)\\b[^>]*>",
+     ),
+     _SENTENCE_RE = re.compile("(?<=[.!?])\\s+|\\s*[|•·]\\s*|\\n"),
      _PREFIXES = "^(?:get|try|use|join)(?=\\w{4})",
      _SUFFIXES = "(?<=\\w{4})hq$",
      _SECOND_LEVEL = {"co", "com", "org", "net", "ac", "gov", "edu"};
@@ -225,11 +227,11 @@ def _folded(cp: int) -> any {
 }
 
 def fold_accents(text: str) -> str {
-    return (text or "").translate(_FOLD_TABLE);
+    return str((text or "").translate(_FOLD_TABLE));
 }
 
 def nfc(text: str) -> str {
-    return unicodedata.normalize("NFC", text or "");
+    return str(unicodedata.normalize("NFC", text or ""));
 }
 
 def _is_name_token(token: str) -> bool {
@@ -360,15 +362,16 @@ def _claims(p: dict[str, any], html: str, domain: str) -> list[any] {
 }
 
 def _lines(html: str) -> list[str] {
-    text = unescape(re.sub("(?s)<[^>]+>", " ", re.sub(_BLOCK_TAG_RE, "\n", _strip_code(html))));
-    text += "\n" + "\n".join(unescape(a) for a in re.findall(_ATTR_TEXT_RE, html));
+    text = str(unescape(re.sub("(?s)<[^>]+>", " ", _BLOCK_TAG_RE.sub("\n", _strip_code(html)))));
+    text += "\n" + "\n".join(unescape(a) for a in _ATTR_TEXT_RE.findall(html));
     out: list[str] = [];
     for line in text.split("\n") {
-        out.extend([
-            s.strip()
-            for s in re.split(_SENTENCE_RE, re.sub("\\s+", " ", line).strip())
-            if s.strip()
-        ]);
+        for part in _SENTENCE_RE.split(re.sub("\\s+", " ", line).strip()) {
+            s = str(part).strip();
+            if s {
+                out.append(s);
+            }
+        }
     }
     return out;
 }
