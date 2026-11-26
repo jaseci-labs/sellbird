@@ -1313,6 +1313,7 @@ def _wants_role(spec: dict[str, any]) -> bool {
 }
 
 def preset_problem(preset: str, provider_key: str, config: any = None) -> str | None {
+    import from sellbird.collectors.ats { role_keywords }
     if not preset {
         return None;
     }
@@ -1341,6 +1342,7 @@ def build_queries(
     limit: int = 100,
     preset: str = "",
 ) -> list[DiscoveryQuery] {
+    import from sellbird.collectors.ats { role_keywords }
     icp = config.icp;
     terms = list(icp.industries) or [config.product.name];
     spec = PRESETS.get(preset) if preset else None;
@@ -1418,6 +1420,7 @@ obj _Run {
     }
 
     async def take(biz: Business, query: DiscoveryQuery) -> list[dict[str, any]] {
+        import from sellbird.gate { do_not_contact_domain_match }
         if query.preset == "hiring" and biz.domain and not is_junk(biz.domain) {
             biz.domain = company_host(biz.domain);
         }
@@ -1491,6 +1494,7 @@ async def run_discovery(
     max_spend: float = 1.0,
     dry_run: bool = False,
 ) -> DiscoveryReport {
+    import from sellbird.signals { seed_signal_catalog }
     provider = PROVIDERS.get(provider_key);
     if provider is None {
         raise ValueError(f"unknown discovery provider: {provider_key!r}");

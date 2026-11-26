@@ -267,6 +267,7 @@ def _words(text: str) -> list[str] {
 }
 
 def _instruction_runs(base: any) -> dict[any, str] {
+    import from sellbird.untrusted { UNTRUSTED_RULE }
     files = [p for d in ("prompts", "skills") for p in (base / d).glob("*.md")];
     files = sorted(p for p in files if p.name not in _SAY_ALOUD_FILES);
     key = (str(base), tuple((str(p), p.stat().st_mtime_ns) for p in files));
