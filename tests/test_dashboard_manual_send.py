@@ -334,9 +334,9 @@ class _Provider:
 def test_sellbird_can_send(monkeypatch, cfg, env, provider_ok, expected):
     import sellbird.config
     import sellbird.integrations.mail_provider as mp
-    monkeypatch.setattr(dash, "load_config", lambda: cfg)
-    monkeypatch.setattr(dash, "load_env", lambda: env)
-    monkeypatch.setattr(dash, "get_mail_provider", lambda c, e: _Provider(provider_ok))
+    monkeypatch.setattr(sellbird.config, "load_config", lambda: cfg)
+    monkeypatch.setattr(sellbird.config, "load_env", lambda: env)
+    monkeypatch.setattr(mp, "get_mail_provider", lambda c, e: _Provider(provider_ok))
     # These tests don't use the env fixture, so this is the real check.
     assert dash._sellbird_can_send() is expected
 
@@ -346,7 +346,7 @@ def test_an_unreadable_config_means_sellbird_might_send(monkeypatch):
 
     def boom():
         raise ValueError("bad yaml")
-    monkeypatch.setattr(dash, "load_config", boom)
+    monkeypatch.setattr(sellbird.config, "load_config", boom)
     assert dash._sellbird_can_send() is True
 
 

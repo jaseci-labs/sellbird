@@ -1,15 +1,12 @@
 import asyncio;
 import builtins;
-import csv;
 import functools;
-import io;
 import ipaddress;
 import json;
 import logging;
 import os;
 import shutil;
 import signal;
-import sqlite3;
 import stat;
 import subprocess;
 import sys;
@@ -20,8 +17,6 @@ import from collections.abc { Sequence }
 import from datetime { date, datetime, timedelta, timezone }
 import from pathlib { Path }
 import aiosqlite;
-import httpx;
-import uvicorn;
 import yaml;
 import from dotenv { load_dotenv }
 import from fastapi { APIRouter, FastAPI, Request }
@@ -106,6 +101,7 @@ async def _not_on_hosted(request: Request, exc: NotOnHosted) -> any {
 }
 
 def _resolve_config_file -> Path {
+    import from sellbird.config { ConfigFileNotFoundError, _find_config_file }
     try {
         return Path(_find_config_file());
     } except ConfigFileNotFoundError {
@@ -338,6 +334,7 @@ def _config_valid(config_path: any) -> bool {
 
 @app.get("/api/setup-status")
 async def get_setup_status -> any {
+    import sellbird.integrations.trulyinbox as ti;
     env_vars = _read_env_file();
     provider = _current_provider();
     if provider in _PROVIDER_SETUP {
@@ -456,6 +453,9 @@ async def save_env_settings(request: Request) -> any {
 
 @app.post("/api/trulyinbox/connect")
 async def trulyinbox_connect(request: Request) -> any {
+    import from sellbird.config { load_config }
+    import sellbird.deliverability as d;
+    import sellbird.integrations.trulyinbox as ti;
     data = await _json(request);
     key = data.get("key") if isinstance(data, dict) else None;
     if not isinstance(key, str) or not key.strip() or len(key) > 512 {
@@ -497,17 +497,20 @@ async def trulyinbox_connect(request: Request) -> any {
 
 @app.get("/api/rename-notice")
 async def get_rename_notice -> any {
+    import sellbird.legacy as legacy;
     return {"show": legacy.welcome_pending()};
 }
 
 @app.post("/api/rename-notice/dismiss")
 async def dismiss_rename_notice -> any {
+    import sellbird.legacy as legacy;
     legacy.dismiss_welcome();
     return {"success": True};
 }
 
 @app.post("/api/trulyinbox/other")
 async def trulyinbox_other -> any {
+    import sellbird.integrations.trulyinbox as ti;
     await ti.set_choice(await _open_state(), "other");
     return {"success": True};
 }
@@ -525,6 +528,8 @@ def _offer_config_file -> Path {
 }
 
 async def _offer_brain -> tuple[any, any, any] {
+    import from sellbird.brain { Brain }
+    import from sellbird.config { load_config }
     config = load_config();
     state = await _open_state();
     return (Brain(state, config.brain), state, config);
@@ -532,6 +537,8 @@ async def _offer_brain -> tuple[any, any, any] {
 
 @app.get("/api/offer")
 async def get_offer -> any {
+    import from sellbird.config { load_config }
+    import from sellbird.offer { offer_view }
     try {
         return offer_view(load_config());
     } except Exception as e {
@@ -541,6 +548,7 @@ async def get_offer -> any {
 
 @app.post("/api/offer/suggest")
 async def suggest_offer -> any {
+    import from sellbird.offer { suggest_offers }
     try {
         (brain, _, config) = await _offer_brain();
         ideas = await suggest_offers(brain, config);
@@ -553,6 +561,7 @@ async def suggest_offer -> any {
 
 @app.post("/api/offer/preview")
 async def preview_offer(request: Request) -> any {
+    import from sellbird.offer { MAX_OFFER_CHARS, preview_email }
     offer = _words((await _json_if_json(request)).get("entry"), MAX_OFFER_CHARS);
     if not offer {
         return _not_ok("Write an offer first.", 400);
@@ -568,6 +577,7 @@ async def preview_offer(request: Request) -> any {
 
 @app.post("/api/offer")
 async def save_offer_route(request: Request) -> any {
+    import from sellbird.offer { MAX_OFFER_CHARS, PROPOSED_KEY, save_offer }
     body = await _json_if_json(request);
     offer = _words(body.get("entry"), MAX_OFFER_CHARS);
     ideas = body.get("ideas");
@@ -586,6 +596,8 @@ async def save_offer_route(request: Request) -> any {
 
 @app.get("/api/company")
 async def get_company -> any {
+    import from sellbird.config { load_config }
+    import from sellbird.offer { PROPOSED_KEY, company_view }
     try {
         raw = await (await _open_state()).get_setting(PROPOSED_KEY);
         return company_view(load_config(), PROJECT_ROOT, json.loads(raw) if raw else None);
@@ -596,6 +608,7 @@ async def get_company -> any {
 
 @app.post("/api/company")
 async def save_company_route(request: Request) -> any {
+    import from sellbird.offer { save_company }
     body = await _json_if_json(request);
     fields = body.get("fields");
     if not isinstance(fields, dict) or not fields {
@@ -613,6 +626,7 @@ async def save_company_route(request: Request) -> any {
 
 @app.post("/api/offer/propose")
 async def propose_offer(request: Request) -> any {
+    import from sellbird.offer { MAX_OFFER_CHARS, PROPOSED_KEY }
     body = await _json_if_json(request);
     offer = _words(body.get("entry"), MAX_OFFER_CHARS);
     why = _words(body.get("why"), 500);
@@ -629,12 +643,14 @@ async def propose_offer(request: Request) -> any {
 
 @app.delete("/api/offer/propose")
 async def dismiss_proposed_offer -> any {
+    import from sellbird.offer { PROPOSED_KEY }
     await (await _open_state()).delete_setting(PROPOSED_KEY);
     return {"success": True};
 }
 
 @app.post("/api/settings/test-instantly")
 async def test_instantly(request: Request) -> any {
+    import httpx;
     api_key = str((await _json(request, {})).get("api_key", "") or "");
     if not api_key {
         return {"success": False, "message": "No API key provided."};
@@ -655,6 +671,8 @@ async def test_instantly(request: Request) -> any {
 
 @app.get("/api/companies")
 async def get_companies -> any {
+    import from sellbird.config { load_config }
+    import from sellbird.register { build_register }
     rows = await query_db(
         "SELECT c.*, (SELECT COUNT(*) FROM prospects p WHERE p.company_id = c.id) as contact_count FROM companies c ORDER BY c.created_at DESC",
     );
@@ -680,6 +698,8 @@ async def get_companies -> any {
 
 @app.get("/api/export/companies.csv")
 async def export_companies -> any {
+    import from sellbird.config { load_config }
+    import from sellbird.register { build_register, to_csv }
     try {
         text = to_csv(await build_register(query_db, load_config()));
     } except Exception as e {
@@ -691,6 +711,8 @@ async def export_companies -> any {
 
 @app.get("/api/companies/{company_id}/profile")
 async def get_company_profile(company_id: str) -> any {
+    import from sellbird.config { load_config }
+    import from sellbird.register { build_register }
     rows = await query_db("SELECT * FROM companies WHERE id = ?", (company_id,));
     if not rows {
         return _error("not found", 404);
@@ -774,6 +796,7 @@ async def get_sellbird_status -> any {
 
 @app.post("/api/sellbird/start")
 async def start_sellbird -> any {
+    import from sellbird.main { _needs_setup }
     if _check_sellbird_pid() {
         return {"success": False, "message": "Sellbird is already running."};
     }
@@ -936,6 +959,7 @@ glob _USAGE_SUM = ("COUNT(DISTINCT CASE WHEN session_id != '' THEN session_id EL
      _quota_clients: dict[any, any] = {};
 
 def _active_brain -> any {
+    import from sellbird.config { load_brain_config }
     try {
         return load_brain_config();
     } except Exception {
@@ -944,6 +968,7 @@ def _active_brain -> any {
 }
 
 async def _brain_status -> dict[str, any] {
+    import from sellbird.brain { BRAIN_STATUS_KEY, active_brain_status }
     rows = await query_db("SELECT value FROM settings WHERE key = ?", (BRAIN_STATUS_KEY,));
     return active_brain_status(rows[0]["value"], _active_provider()) if rows else {};
 }
@@ -954,6 +979,8 @@ def _active_provider -> str {
 }
 
 def _quota_client_for(provider: str, model: str = "") -> any {
+    import from sellbird.codex { CodexClient, CodexQuotaClient }
+    import from sellbird.integrations.quota { QuotaClient }
     key = (provider, model if provider == "codex" else "");
     if key not in _quota_clients {
         if provider == "codex" {
@@ -1142,6 +1169,8 @@ async def get_outbox_api -> any {
 
 @app.get("/api/sending-mode")
 async def get_sending_mode -> any {
+    import from sellbird.config { load_config }
+    import from sellbird.gate { _booking_prefix, allowed_link_domains }
     path = _resolve_config_file();
     try {
         config = load_config(str(path));
@@ -1161,6 +1190,7 @@ async def get_sending_mode -> any {
 
 @app.post("/api/sending-mode")
 async def set_sending_mode(request: Request) -> any {
+    import from sellbird.config { ConfigError, set_require_approval }
     body = await _json(request);
     mode = body.get("mode") if isinstance(body, dict) else None;
     if mode not in ("approval", "autopilot") {
@@ -1213,6 +1243,8 @@ def _signed(text: str, kind: any) -> str {
 @app.post("/api/outbox/{item_id}/edit")
 @_OR_500
 async def outbox_edit(item_id: str, request: Request) -> any {
+    import from sellbird.email_style { style_problems }
+    import from sellbird.gate { pre_send_check }
     body = _dict(await _json(request, {}));
     subject = str(body.get("subject") or "").strip();
     text = str(body.get("body") or "").strip();
@@ -1256,6 +1288,8 @@ async def outbox_edit(item_id: str, request: Request) -> any {
 }
 
 def _sellbird_can_send -> bool {
+    import from sellbird.config { legacy_sending_held, load_config, load_env }
+    import from sellbird.integrations.mail_provider { NATIVE_PROVIDERS, get_mail_provider }
     try {
         (config, env) = (load_config(), load_env());
         email = config.channels.email;
@@ -1273,6 +1307,7 @@ def _sellbird_can_send -> bool {
 }
 
 def _extra_inboxes_connected -> bool {
+    import sqlite3;
     if not Path(DB_PATH).exists() {
         return False;
     }
@@ -1287,6 +1322,7 @@ def _extra_inboxes_connected -> bool {
 }
 
 def _send_as -> str {
+    import from sellbird.config { load_config }
     try {
         return load_config().persona.email or "";
     } except Exception {
@@ -1295,6 +1331,7 @@ def _send_as -> str {
 }
 
 def _compliance_view -> dict[str, any] {
+    import from sellbird.config { compliance_footer_lines, compliance_notice, load_config }
     try {
         config = load_config();
         return {
@@ -1454,6 +1491,7 @@ async def sending_toggle(action: str) -> any {
 
 @app.get("/api/export/prospects.csv")
 async def export_prospects(all: bool = False, min_score: int = 0, email_status: str = "") -> any {
+    import from sellbird.export { export_prospects_csv }
     state = StateManager(db_path=str(DB_PATH));
     try {
         await state.init_db();
@@ -1757,6 +1795,7 @@ glob _discovery_task: any = None,
      _BUSY_RUN = "a run is already going";
 
 def _discovery_queries(body: dict[any, any], config: any) -> any {
+    import from sellbird.collectors.discover { build_queries, preset_problem }
     preset = str(body.get("preset") or "");
     problem = preset_problem(preset, str(body.get("provider") or ""), config=config);
     if problem {
@@ -1778,6 +1817,8 @@ def _running -> bool {
 
 @app.get("/api/discover/providers")
 async def get_discovery_providers -> any {
+    import from sellbird.collectors.discover { DEFAULT_PROVIDER, provider_menu }
+    import from sellbird.config { load_env }
     try {
         state = await _open_state();
         return {
@@ -1798,6 +1839,8 @@ async def get_discovery_providers -> any {
 
 @app.post("/api/discover/estimate")
 async def estimate_discovery(request: Request) -> any {
+    import from sellbird.collectors.discover { PROVIDERS, estimate_cost }
+    import from sellbird.config { load_config }
     try {
         body = await request.json();
         provider = body.get("provider") or "";
@@ -1824,6 +1867,7 @@ async def estimate_discovery(request: Request) -> any {
 async def _discover_report(
     state: any, config: any, provider: str, queries: any, spend: float
 ) -> any {
+    import from sellbird.pipeline { run_prospecting }
     result = await run_prospecting(state, config, provider, queries, max_spend=spend);
     return {
         **(result.discover or {}),
@@ -1834,6 +1878,8 @@ async def _discover_report(
 }
 
 async def _profile_report(state: any) -> any {
+    import from sellbird.config { load_config }
+    import from sellbird.pipeline { run_profile_stage }
     try {
         config: any = load_config();
     } except Exception {
@@ -1863,6 +1909,8 @@ def _launch(kind: str, work: any) {
 @app.post("/api/discover/run")
 @_OR_500
 async def start_discovery(request: Request) -> any {
+    import from sellbird.collectors.discover { PROVIDERS }
+    import from sellbird.config { load_config }
     if _running() {
         return _refuse(_BUSY_RUN);
     }
@@ -2099,6 +2147,7 @@ async def get_live_status -> any {
 }
 
 def _require_approval_now -> bool {
+    import from sellbird.config { load_config }
     try {
         return bool(load_config(str(_resolve_config_file())).channels.email.require_approval);
     } except Exception {
@@ -2140,6 +2189,11 @@ def _plural(n: int, one: str, many: str) -> str {
 
 @app.get("/api/today")
 async def get_today -> any {
+    import from sellbird.agents.writer { EMAIL_RULES_PROBLEM_KEY }
+    import from sellbird.config { load_config }
+    import from sellbird.integrations.precleared { current_hold, hold_message }
+    import from sellbird.sending_mode { held_message }
+    import from sellbird.signals { seed_signal_catalog }
     items: list[any] = [];
     stats: dict[str, any] = {};
     try {
@@ -2272,6 +2326,7 @@ def _seen(found: dict[any, any]) -> dict[str, any] {
 
 @app.get("/api/signals")
 async def get_signals -> any {
+    import from sellbird.signals { seed_signal_catalog }
     try {
         state = await _open_state();
         await seed_signal_catalog(state);
@@ -2296,6 +2351,7 @@ async def get_signals -> any {
 @app.post("/api/signals/status")
 @_OR_500
 async def set_signals_status(request: Request) -> any {
+    import from sellbird.signals { seed_signal_catalog }
     body = await request.json();
     status = (body.get("status") or "").strip();
     codes = body.get("codes") or ([body["code"]] if body.get("code") else []);
@@ -2449,6 +2505,8 @@ def _csv_cell(value: any) -> str {
 
 @app.get("/api/cohort.csv")
 async def export_cohort(require: str = "", exclude: str = "", ranges: str = "") -> any {
+    import csv;
+    import io;
     buf = io.StringIO();
     writer = csv.writer(buf);
     writer.writerow(list(_COHORT_COLUMNS));
@@ -2567,6 +2625,8 @@ def build_app(*, guard: Middleware | None = None, routers: Sequence[APIRouter] =
 }
 
 def start_dashboard(host: str = "127.0.0.1", port: int = 5555) {
+    import sellbird.dashboard_instance as dashboard_instance;
+    import uvicorn;
     try {
         bind = _check_loopback_bind(host);
         url = dashboard_url(host, port);

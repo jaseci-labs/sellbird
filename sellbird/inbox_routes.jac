@@ -317,6 +317,7 @@ async def connect_main_mailbox -> any {
 
 @router.post("/api/inboxes/connect/{kind}")
 async def connect_inbox(kind: str, request: Request) -> any {
+    import from sellbird.integrations.smtp_mail { SmtpSettings }
     if kind not in ("gmail", "microsoft", "smtp") {
         return _refuse("Connect gmail, microsoft or smtp.", 404);
     }

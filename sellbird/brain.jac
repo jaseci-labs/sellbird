@@ -129,8 +129,8 @@ class Brain {
         _status_synced: bool = False;
 
     def init(state: StateManager, brain_config: any = None, transport: any = None) {
-    import from sellbird.integrations.quota { QuotaClient }
-    import from sellbird.codex { CodexClient, CodexQuotaClient }
+        import from sellbird.integrations.quota { QuotaClient }
+        import from sellbird.codex { CodexClient, CodexQuotaClient }
         self.state = state;
         self.transport = transport;
         self.config = brain_config or BrainConfig();
