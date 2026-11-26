@@ -1,0 +1,18 @@
+[project]
+exclude = ["bench/*"]
+
+[pypi."."]
+[pypi.".".build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+[pypi.".".project]
+name = "spam"
+version = "0.1"
+[pypi.".".tool.setuptools.packages.find]
+include = ["spam*"]
+
+[wheel."."]
+files = ["spam/__init__.py"]
+
+[extensions."spam/_fast"]
+jac = "native/fast.jac"

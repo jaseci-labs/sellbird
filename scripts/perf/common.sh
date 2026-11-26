@@ -10,5 +10,8 @@ export REPO SELLBIRD_BASE PERF_DIR PY
 # the live Claude quota and the user's settings out of it.
 export HOME="$PERF_DIR/fakehome" CLAUDE_CONFIG_DIR="$PERF_DIR/fakehome/.claude" PYTHONSAFEPATH=1
 mkdir -p "$HOME"
+# Sides to compare: base is the original Python; jac is this build. Set
+# JAC_BEFORE to another checkout's build site to add a third side, "before".
+export JAC_BEFORE="${JAC_BEFORE:-}"
 runb() { ( cd "$PERF_DIR/home_base" && SELLBIRD_HOME="$PERF_DIR/home_base" PYTHONPATH="$SELLBIRD_BASE" "$PY" "$@" ); }
 runj() { ( cd "$PERF_DIR/home_jac" && SELLBIRD_HOME="$PERF_DIR/home_jac" PYTHONPATH="$REPO/.jac/build/pypi/top/site" "$PY" "$@" ); }

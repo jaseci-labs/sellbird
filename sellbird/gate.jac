@@ -63,6 +63,7 @@ glob _SAY_ALOUD_FILES = frozenset(
      _SCRIPT_LINE_RE = re.compile("^\\s*(?:[-*]\\s*)?(?:>|[\\\"“'‘])"),
      _QUOTED_RE = re.compile("\"[^\"\\n]{12,}\"|“[^”\\n]{12,}”"),
      _leak_cache: dict[str, any] = {},
+     _leak_runs: dict[any, str] = {},
      _PHONE_RE = re.compile(
          "(?<![\\w+#$€£])(?:\\+|00)?\\(?\\d[\\d \\t().\\-\\u2010-\\u2015/]{5,22}\\d(?![\\w])"
      ),
@@ -262,7 +263,7 @@ def _is_booking_page(link: str, prefix: str) -> bool {
         and (link.rstrip("/") == prefix or link.startswith(prefix + "/"));
 }
 
-def _words(text: str) -> list[str] {
+def _words(text: str) -> any {
     return _WORD_RE.findall((text or "").lower());
 }
 
@@ -272,7 +273,7 @@ def _instruction_runs(base: any) -> dict[any, str] {
     files = sorted(p for p in files if p.name not in _SAY_ALOUD_FILES);
     key = (str(base), tuple((str(p), p.stat().st_mtime_ns) for p in files));
     if _leak_cache.get("key") != key {
-        runs: dict[any, str] = {};
+        _leak_runs.clear();
         sources: list[tuple[str, str]] = [];
         for p in files {
             lines = p.read_text(encoding="utf-8", errors="replace").splitlines();
@@ -283,12 +284,12 @@ def _instruction_runs(base: any) -> dict[any, str] {
         for (name, text) in sources {
             ws = _words(text);
             for i in range(len(ws) - LEAK_RUN_WORDS + 1) {
-                runs.setdefault(tuple(ws[i:i + LEAK_RUN_WORDS]), name);
+                _leak_runs.setdefault(tuple(ws[i:i + LEAK_RUN_WORDS]), name);
             }
         }
-        _leak_cache.update(key=key, runs=runs);
+        _leak_cache["key"] = key;
     }
-    return _leak_cache["runs"];
+    return _leak_runs;
 }
 
 def _digits(value: str) -> str {
