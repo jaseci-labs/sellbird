@@ -30,7 +30,7 @@ def _contact(p: dict[any, any]) -> str {
     return f"{label}: {p.get('email') or 'no email'} [{p.get('email_status') or 'unchecked'}]{flag}";
 }
 
-def _has(prospects: list[any], wanted: set[str]) -> bool {
+def _has(prospects: any, wanted: set[str]) -> bool {
     return any(p.get("status") in wanted for p in prospects);
 }
 

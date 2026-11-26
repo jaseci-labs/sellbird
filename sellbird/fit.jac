@@ -16,7 +16,7 @@ def _role_matches(text: str, terms: list[str]) -> str {
     return next((t for t in terms if re.search(f"(?<![\\w-]){re.escape(t)}(?![\\w-])", low)), "");
 }
 
-def current_roles(observations: list[dict[str, any]]) -> list[dict[str, any]] {
+def current_roles(observations: list[any]) -> list[any] {
     roles = sorted(
         [o for o in observations if o.get("signal_code") == "HIRING_ROLE"],
         key=lambda (o: any) -> any { o.get("observed_at") or "" },
@@ -30,11 +30,11 @@ def current_roles(observations: list[dict[str, any]]) -> list[dict[str, any]] {
 }
 
 def company_fit(
-    company: dict[str, any],
-    prospects: list[dict[str, any]],
-    observations: list[dict[str, any]],
+    company: any,
+    prospects: list[any],
+    observations: list[any],
     config: any,
-    dnc: list[str] | None = None,
+    dnc: any = None,
 ) -> tuple[int, list[str]] {
     icp = config.icp;
     if dnc is None {

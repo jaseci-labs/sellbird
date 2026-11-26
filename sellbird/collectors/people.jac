@@ -56,6 +56,11 @@ glob COMMON_WORDS = frozenset(
              "mecanicienne:mecanicien installatrice:installateur repartitrice:repartiteur "
              "proprietaires:proprietaire").split(),
      ),
+     _FEMININE_RE = re.compile("(?<![a-z])(?:" + "|".join(_FEMININE) + ")(?![a-z])"),
+     _MEMO_SIZE = 4096,
+     _NORMED: dict[str, str] = {},
+     _FAMILY: dict[str, str] = {},
+     _CLEANED: dict[tuple[str, str], str] = {},
      _OWNER_FAMILY_KEYS = frozenset(_family_key(t) for t in _OWNER_FAMILY) | {"partner"},
      _OWNER_TITLE = "(?i)\\b(?:co-?owner|owner|co-?founder|founder|proprietor|ceo|chief executive(?: officer)?|president|managing (?:partner|member)|founding (?:partner|attorney|dentist|doctor)|principal(?! (?:designer|engineer|consultant|architect|associate|scientist|developer))|co-?proprietaire|proprietaire|presidente?|pdg|p\\.-?d\\.g|co-?fondat(?:eur|rice)|fondat(?:eur|rice)|direct(?:eur|rice) generale?)\\b",
      _SUBORDINATE = "(?i)\\b(?:vice[- ]presidente?|vp|svp|evp|assistant(?: to)?|executive assistant|to the|deputy|associate|aide|assistante?s?|adjointe?s?|sous-\\w+)\\b",
@@ -232,13 +237,28 @@ def is_person_name(text: str) -> bool {
     return split_person_name(text) is not None;
 }
 
+def _remember(memo: any, key: any, value: str) -> str {
+    if len(memo) >= _MEMO_SIZE {
+        memo.clear();
+    }
+    memo[key] = value;
+    return value;
+}
+
 def _norm_title(text: str) -> str {
-    feminine = lambda (m: any) -> any { _FEMININE.get(m.group(0), m.group(0)) };
-    return re.sub("[a-z]+", feminine, fold_accents(text or "").lower());
+    text = text or "";
+    if text in _NORMED {
+        return _NORMED[text];
+    }
+    feminine = lambda (m: any) -> any { _FEMININE[m.group(0)] };
+    return _remember(_NORMED, text, str(_FEMININE_RE.sub(feminine, fold_accents(text).lower())));
 }
 
 def _family_key(text: str) -> str {
-    return re.sub("[\\s\\-–]+", " ", _norm_title(text).strip());
+    if text in _FAMILY {
+        return _FAMILY[text];
+    }
+    return _remember(_FAMILY, text, str(re.sub("[\\s\\-–]+", " ", _norm_title(text).strip())));
 }
 
 def is_owner_title(title: str) -> bool {
@@ -250,6 +270,13 @@ def is_owner_title(title: str) -> bool {
 }
 
 def _clean_for_target(title: str, target: str) -> str {
+    if (title, target) in _CLEANED {
+        return _CLEANED[(title, target)];
+    }
+    return _remember(_CLEANED, (title, target), _clean_uncached(title, target));
+}
+
+def _clean_uncached(title: str, target: str) -> str {
     low = f" {_norm_title(title)} ";
     if "vice" not in target and "vp" not in target.split() {
         low = re.sub("\\bvice[- ]president\\b|\\b[se]?vp\\b", " ", low);
