@@ -1467,13 +1467,13 @@ graph import {
         compose,
         identity_from_config,
         looks_like_bounce,
-        loopback_code,
         missing_token_text,
         read_token_file,
         save_if_signed_in_as,
         token_urlsafe,
         write_token_file,
     }
+    sellbird.integrations.loopback ++> sellbird.integrations.gmail { loopback_code }
     sellbird.integrations.signature ++> sellbird.integrations.gmail {
         SignatureError,
         load_signature,
@@ -1489,13 +1489,13 @@ graph import {
         TokenSource,
         identity_from_config,
         looks_like_bounce,
-        loopback_code,
         missing_token_text,
         read_token_file,
         save_if_signed_in_as,
         token_urlsafe,
         write_token_file,
     }
+    sellbird.integrations.loopback ++> sellbird.integrations.microsoft { loopback_code }
     sellbird.integrations.signature ++> sellbird.integrations.microsoft {
         SignatureError,
         load_signature,

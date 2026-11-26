@@ -135,6 +135,7 @@ async def connect_flow(args: any, store: any, secrets: any, config: any, env: an
         common = {"address": args.address, "display_name": args.name};
         common["warmup_started_at"] = args.warmup_started or "";
         if args.kind == "smtp" {
+            import from sellbird.integrations.smtp_mail { SmtpSettings }
             settings = SmtpSettings(
                 host=args.smtp_host,
                 username=args.username or address,

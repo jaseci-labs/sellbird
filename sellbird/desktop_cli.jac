@@ -71,6 +71,7 @@ def cmd_tray(args: any, *, data_dir: any = None, transport: any = None, autostar
     }
     handler = logging.StreamHandler();
     handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s: %(message)s"));
+    import from sellbird.logsafety { RedactSecrets }
     handler.addFilter(RedactSecrets());
     (tray_logger := logging.getLogger("sellbird.tray")).addHandler(handler);
     tray_logger.setLevel(logging.INFO);

@@ -123,6 +123,7 @@ files = [
     "sellbird/integrations/gmail.jac",
     "sellbird/integrations/instantly.jac",
     "sellbird/integrations/linkedin.jac",
+    "sellbird/integrations/loopback.jac",
     "sellbird/integrations/mail_provider.jac",
     "sellbird/integrations/microsoft.jac",
     "sellbird/integrations/precleared.jac",
