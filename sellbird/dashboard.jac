@@ -1067,7 +1067,7 @@ def _in(ids: any) -> str {
     return ",".join(["?"] * len(ids));
 }
 
-def _signal_value(r: dict[any, any]) -> str {
+def _signal_value(r: any) -> str {
     if r["value_text"] {
         return r["value_text"];
     }
@@ -1128,9 +1128,7 @@ async def _with_context(items: list[any]) -> list[any] {
     return items;
 }
 
-def _context(
-    p: dict[any, any], campaign: str, signals: dict[any, dict[str, str]]
-) -> dict[str, any] {
+def _context(p: any, campaign: str, signals: any) -> dict[str, any] {
     return {
         "campaign": campaign,
         "company": p.get("company_name", ""),

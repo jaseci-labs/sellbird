@@ -36,13 +36,15 @@ def same_body(a, b):
     return False
 
 
-report = {"load": [], "dash": {}, "pages": {}}
+report = {"load": [], "dash": {}, "pages": {}, "gate": {}}
 dash = {s: [] for s in SIDES}
 pages = {s: [] for s in SIDES}
+gate = {s: [] for s in SIDES}
 for i in range(N):
     for side in SIDES[i % len(SIDES):] + SIDES[:i % len(SIDES)]:
         dash[side].append(run(side, "dash_bench.py", "5"))
         pages[side].append(run(side, "pages_bench.py", "2", "40"))
+        gate[side].append(run(side, "gate_bench.py", "4"))
     report["load"].append(os.getloadavg()[0])
 for ep in dash["base"][0]["times"]:
     row = {s: statistics.median(r["times"][ep] for r in dash[s]) for s in SIDES}
@@ -55,5 +57,10 @@ row["same"] = all({r["hash"] for r in pages[s]} == {r["hash"] for r in pages["ba
 report["pages"] = row
 cols = "  ".join(f"{s} {row[s]:8.1f} ms" for s in SIDES)
 print(f"{'read 40 pages twice':36s} {cols}  base/jac x{row['base'] / row['jac']:5.2f}  {row['same']}")
+row = {s: statistics.median(r["ms"] for r in gate[s]) for s in SIDES}
+row["same"] = all(r["out"] == gate["base"][0]["out"] for s in SIDES for r in gate[s])
+report["gate"] = row
+cols = "  ".join(f"{s} {row[s]:8.1f} ms" for s in SIDES)
+print(f"{'gate checks on 200 emails':36s} {cols}  base/jac x{row['base'] / row['jac']:5.2f}  {row['same']}")
 print(f"load median {statistics.median(report['load']):.2f}")
 json.dump(report, open(out, "w"), indent=1)
