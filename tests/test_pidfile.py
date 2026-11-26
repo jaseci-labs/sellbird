@@ -213,7 +213,7 @@ def test_sellbird_run_refuses_when_a_loop_is_already_running(monkeypatch, tmp_pa
 
 def test_start_launches_the_heartbeat_not_the_cli_help(status_client, monkeypatch, tmp_path):
     import sellbird.main as main_mod
-    monkeypatch.setattr(dash, "_needs_setup", lambda: False)
+    monkeypatch.setattr(main_mod, "_needs_setup", lambda: False)
     monkeypatch.setattr(pidfile, "LOCK_FILE", tmp_path / "sellbird.lock")
     monkeypatch.setattr(dash, "LOG_FILE", tmp_path / "sellbird.log")
     launched = {}
@@ -247,7 +247,7 @@ class _FakeChild:
 def test_start_runs_the_loop_with_no_terminal_input(status_client, monkeypatch, tmp_path):
     """The child must never read the dashboard's terminal (the setup wizard would)."""
     import sellbird.main as main_mod
-    monkeypatch.setattr(dash, "_needs_setup", lambda: False)
+    monkeypatch.setattr(main_mod, "_needs_setup", lambda: False)
     monkeypatch.setattr(pidfile, "LOCK_FILE", tmp_path / "sellbird.lock")
     monkeypatch.setattr(dash, "LOG_FILE", tmp_path / "sellbird.log")
     seen = {}
@@ -265,7 +265,7 @@ def test_start_runs_the_loop_with_no_terminal_input(status_client, monkeypatch, 
 def test_start_refuses_before_setup_is_done(status_client, monkeypatch, tmp_path):
     import sellbird.main as main_mod
     monkeypatch.setattr(pidfile, "LOCK_FILE", tmp_path / "sellbird.lock")
-    monkeypatch.setattr(dash, "_needs_setup", lambda: True)
+    monkeypatch.setattr(main_mod, "_needs_setup", lambda: True)
 
     def _never(*a, **k):
         raise AssertionError("started a loop that would sit in the setup wizard")
